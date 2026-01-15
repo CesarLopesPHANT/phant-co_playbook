@@ -1,0 +1,7 @@
+{
+  "name": "PhantLab Sales Playbook",
+  "description": "A high-performance commercial playbook system inspired by Notion, featuring AI-powered sales mentoring and governance.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}

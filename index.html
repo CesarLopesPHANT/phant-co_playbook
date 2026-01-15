@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>PhantLab | Sales Interface</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8f9fa;
+            color: #1a1a1a;
+            -webkit-font-smoothing: antialiased;
+        }
+        
+        ::-webkit-scrollbar { width: 0px; }
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #e2e8f0;
+            border-radius: 10px;
+        }
+
+        /* ESTILO VISUAL DO PREVIEW (SIMULAÇÃO A4) */
+        .proposal-preview-area section.printable-page {
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            margin-bottom: 40px;
+            transition: transform 0.3s ease;
+        }
+
+        /* PLUGIN DE IMPRESSÃO PHANT - ISOLAMENTO TOTAL */
+        @media print, .is-printing {
+            @page {
+                size: A4;
+                margin: 0;
+            }
+            
+            /* Reset radical para ignorar o layout da aplicação */
+            html, body {
+                width: 210mm !important;
+                height: auto !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                background: #fff !important;
+                overflow: visible !important;
+                display: block !important;
+            }
+
+            /* Esconde toda a interface administrativa */
+            .no-print, 
+            nav, 
+            aside, 
+            button, 
+            header,
+            footer,
+            .assistant-btn,
+            .fixed,
+            .sidebar-main,
+            div[class*="lg:w-[450px]"],
+            div[class*="sticky"] {
+                display: none !important;
+                height: 0 !important;
+                width: 0 !important;
+                visibility: hidden !important;
+                opacity: 0 !important;
+            }
+
+            /* Força o reset de flexbox e overflow de todos os containers pais */
+            #root, 
+            #root > div,
+            main, 
+            .proposal-preview-area,
+            .proposal-preview-area > div {
+                display: block !important;
+                visibility: visible !important;
+                position: static !important;
+                width: 210mm !important;
+                height: auto !important;
+                min-height: auto !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                overflow: visible !important;
+                background: none !important;
+                box-shadow: none !important;
+                border: none !important;
+                max-width: none !important;
+            }
+
+            /* Container específico da proposta (.proposal-container) */
+            .proposal-container {
+                display: block !important;
+                visibility: visible !important;
+                transform: none !important; /* CRÍTICO: Anula o zoom da interface */
+                width: 210mm !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                position: static !important;
+            }
+
+            /* Quebra de página e dimensões físicas A4 */
+            section.printable-page, .print-break-after {
+                display: flex !important;
+                flex-direction: column !important;
+                width: 210mm !important;
+                height: 297mm !important; /* Altura A4 exata */
+                margin: 0 !important;
+                padding: 20mm !important;
+                page-break-after: always !important;
+                page-break-inside: avoid !important;
+                position: relative !important;
+                background-color: white !important;
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+                box-sizing: border-box !important;
+                box-shadow: none !important;
+            }
+
+            /* Cores de fundo forçadas */
+            section.printable-page.bg-black {
+                background-color: black !important;
+                color: white !important;
+            }
+            
+            * {
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+        }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react": "https://esm.sh/react@^19.2.3",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.3/",
+    "react/": "https://esm.sh/react@^19.2.3/",
+    "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
+    "recharts": "https://esm.sh/recharts@^3.6.0",
+    "mammoth": "https://esm.sh/mammoth@1.6.0",
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.89.0"
+  }
+}
+</script>
+</head>
+<body>
+    <div id="root"></div>
+</body>
+</html>
