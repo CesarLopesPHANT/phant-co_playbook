@@ -105,9 +105,15 @@ export const SupabaseService = {
   async fetchSolutions(): Promise<SolutionItem[]> {
     try {
       const { data, error } = await supabase.from('solutions').select('*').order('id', { ascending: true });
-      if (error) throw error;
+      if (error) {
+         console.warn("Aviso fetchSolutions:", error.message);
+         return [];
+      }
       return (data || []).map(item => ({ ...item, id: String(item.id), variaveis_opcionais: Array.isArray(item.variaveis_opcionais) ? item.variaveis_opcionais : [] }));
-    } catch (err) { return []; }
+    } catch (err) { 
+      console.error("Erro fatal fetchSolutions:", err);
+      return []; 
+    }
   },
   async syncSolutions(solutions: SolutionItem[]) {
     try {
@@ -134,8 +140,7 @@ export const SupabaseService = {
       if (error) throw error;
       return { success: true };
     } catch (err: any) { 
-      // Se a tabela não existe, pelo menos salvamos no localStorage
-      if (err.code === 'PGRST205') return { success: true, warning: 'offline_mode' };
+      if (err.code === 'PGRST205' || err.message?.includes('fetch')) return { success: true, warning: 'offline_mode' };
       return { success: false, message: err.message }; 
     }
   },
@@ -156,7 +161,7 @@ export const SupabaseService = {
       if (error) throw error;
       return { success: true };
     } catch (err: any) { 
-      if (err.code === 'PGRST205') return { success: true, warning: 'offline_mode' };
+      if (err.code === 'PGRST205' || err.message?.includes('fetch')) return { success: true, warning: 'offline_mode' };
       return { success: false }; 
     }
   },
@@ -178,8 +183,8 @@ export const SupabaseService = {
         .upsert({ id: 'branding', content: content }, { onConflict: 'id' });
       
       if (error) {
-        if (error.code === 'PGRST205') {
-            return { success: true, warning: 'Table public.app_config not found. Using local storage.' };
+        if (error.code === 'PGRST205' || error.message?.includes('fetch')) {
+            return { success: true, warning: 'Table public.app_config not found or fetch error. Using local storage.' };
         }
         return { success: false, message: error.message };
       }
@@ -244,7 +249,10 @@ export const StorageService = {
       if (!response.ok) throw new Error(`HTTP_ERROR_${response.status}`);
       const data = await response.json();
       return this.processFiles(data.files || data.items || [], folderId);
-    } catch (err) { throw new Error("BLOCK_BY_BROWSER"); }
+    } catch (err: any) { 
+      console.error("Erro fetchDriveFiles:", err);
+      throw new Error(err.message || "BLOCK_BY_BROWSER"); 
+    }
   },
   processFiles(files: any[], folderId: string) {
     return files.map((file: any) => {

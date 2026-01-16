@@ -48,18 +48,19 @@ const AdminSettings: React.FC = () => {
   const loadAllData = useCallback(async () => {
     setIsInitialLoading(true);
     try {
-      const [sols, ai, ess, branding] = await Promise.all([
-        SupabaseService.fetchSolutions(),
-        SupabaseService.fetchAIConfig(),
-        SupabaseService.fetchEssencia(),
-        SupabaseService.fetchAppConfig()
-      ]);
+      // Usamos chamadas individuais em vez de Promise.all para não travar tudo se uma tabela falhar
+      const sols = await SupabaseService.fetchSolutions().catch(() => []);
+      const ai = await SupabaseService.fetchAIConfig().catch(() => null);
+      const ess = await SupabaseService.fetchEssencia().catch(() => null);
+      const branding = await SupabaseService.fetchAppConfig().catch(() => null);
+
       if (sols) setSolutions(sols);
       if (ai) setAiConfig(ai);
       if (ess) setEssencia(ess);
       if (branding) setAppConfig(branding);
     } catch (err) {
-      showToast("Erro ao carregar dados do servidor", "error");
+      console.error("Erro no carregamento administrativo:", err);
+      showToast("Alguns dados não puderam ser sincronizados", "error");
     } finally {
       setIsInitialLoading(false);
     }
@@ -72,13 +73,18 @@ const AdminSettings: React.FC = () => {
   const handleSyncSolutions = async () => {
     if (isSyncing) return;
     setIsSyncing(true);
-    const result = await SupabaseService.syncSolutions(solutions);
-    if (result.success) {
-      showToast("Catálogo sincronizado com a Nuvem");
-    } else {
-      showToast("Erro na sincronia: " + result.message, "error");
+    try {
+      const result = await SupabaseService.syncSolutions(solutions);
+      if (result.success) {
+        showToast("Catálogo sincronizado com a Nuvem");
+      } else {
+        showToast("Erro na sincronia: " + result.message, "error");
+      }
+    } catch (err) {
+      showToast("Falha na conexão com o servidor", "error");
+    } finally {
+      setIsSyncing(false);
     }
-    setIsSyncing(false);
   };
 
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -176,15 +182,23 @@ const AdminSettings: React.FC = () => {
   };
 
   const saveAIConfig = async () => {
-    const res = await SupabaseService.syncAIConfig(aiConfig);
-    if (res.success) showToast("Configuração de IA salva");
-    else showToast("Erro ao salvar IA", "error");
+    try {
+      const res = await SupabaseService.syncAIConfig(aiConfig);
+      if (res.success) showToast("Configuração de IA salva");
+      else showToast("Erro ao salvar IA", "error");
+    } catch (err) {
+      showToast("Erro de rede ao salvar", "error");
+    }
   };
 
   const saveEssencia = async () => {
-    const res = await SupabaseService.syncEssencia(essencia);
-    if (res.success) showToast("Nossa Essência atualizada");
-    else showToast("Erro ao salvar essência", "error");
+    try {
+      const res = await SupabaseService.syncEssencia(essencia);
+      if (res.success) showToast("Nossa Essência atualizada");
+      else showToast("Erro ao salvar essência", "error");
+    } catch (err) {
+      showToast("Erro de rede ao salvar", "error");
+    }
   };
 
   const saveCustomization = async () => {
@@ -195,11 +209,8 @@ const AdminSettings: React.FC = () => {
       
       if (res.success) {
         showToast("Configurações salvas! Atualizando interface...");
-        // Em vez de reload bruto, usamos um pequeno delay para garantir o persist
         setTimeout(() => {
           setIsSyncing(false);
-          // O reload é necessário para o App.tsx repuxar o config global do supabase
-          // Mas garantimos que o origin esteja limpo de parâmetros de erro/auth
           window.location.href = window.location.origin + window.location.pathname;
         }, 1200);
       } else {
