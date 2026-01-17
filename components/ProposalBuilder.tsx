@@ -421,11 +421,11 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
           <section className="printable-page w-[210mm] min-h-[297mm] bg-black text-white p-24 flex flex-col justify-between relative shadow-2xl shrink-0 mb-12 print:mb-0 print:shadow-none animate-in zoom-in-95 duration-500 print-break-after">
             <PhantPattern />
             <div className="relative z-10 flex justify-between items-start">
-              <div className="w-16 h-16 bg-white rounded-xl overflow-hidden flex items-center justify-center text-black font-black text-4xl">
+              <div className="w-48 h-auto overflow-hidden flex items-center justify-start text-black font-black">
                  {appConfig.proposalLogoUrl ? (
-                   <img src={appConfig.proposalLogoUrl} alt="Logo" className="w-full h-full object-contain p-2" />
+                   <img src={appConfig.proposalLogoUrl} alt="Logo" className="w-full h-auto object-contain" />
                  ) : (
-                   appConfig.companyName.charAt(0) || 'P'
+                   <span className="text-white text-4xl">{appConfig.companyName.charAt(0) || 'P'}</span>
                  )}
               </div>
               <div className="text-right">
@@ -493,11 +493,11 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
                       <span className="text-[9px] font-bold uppercase text-brand">Website • Instagram • Ads</span>
                   </div>
                 </div>
-                <div className="w-12 h-12 bg-brand rounded-xl overflow-hidden flex items-center justify-center text-white font-black text-2xl">
+                <div className="w-32 h-auto overflow-hidden flex items-center justify-center">
                    {appConfig.proposalLogoUrl ? (
-                     <img src={appConfig.proposalLogoUrl} alt="Logo" className="w-full h-full object-contain p-2" />
+                     <img src={appConfig.proposalLogoUrl} alt="Logo" className="w-full h-auto object-contain" />
                    ) : (
-                     appConfig.companyName.charAt(0) || 'P'
+                     <span className="text-white font-black text-2xl">{appConfig.companyName.charAt(0) || 'P'}</span>
                    )}
                 </div>
             </div>
@@ -561,7 +561,12 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
 
             <footer className="pt-10 border-t border-black/5 text-[10px] font-black text-black/20 uppercase tracking-widest flex justify-between items-center">
                 <span>© {appConfig.companyName} Strategic Engine</span>
-                <span className="opacity-40">{metadata.clientName} Exclusive Access</span>
+                <div className="flex items-center gap-4">
+                  <span className="opacity-40">{metadata.clientName} Exclusive Access</span>
+                  {appConfig.proposalLogoUrl && (
+                    <img src={appConfig.proposalLogoUrl} alt="Logo" className="h-4 w-auto grayscale opacity-30" />
+                  )}
+                </div>
             </footer>
           </section>
         </div>
