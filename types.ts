@@ -100,7 +100,7 @@ export interface PlaybookModule {
   data?: any[];
 }
 
-export type ContentType = 'page' | 'database' | 'template' | 'asset' | 'calculator' | 'script' | 'sla_rule' | 'learning_path' | 'admin' | 'dashboard' | 'fichario' | 'pdf_builder';
+export type ContentType = 'page' | 'database' | 'template' | 'asset' | 'calculator' | 'script' | 'sla_rule' | 'learning_path' | 'admin' | 'dashboard' | 'fichario' | 'pdf_builder' | 'presentation';
 
 export interface ChatMessage {
   role: 'user' | 'assistant';

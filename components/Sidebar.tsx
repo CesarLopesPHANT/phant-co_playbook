@@ -40,7 +40,7 @@ const Sidebar: React.FC<SidebarProps> = ({ modules, selectedModuleId, onSelectMo
                       'Vendedor';
 
   return (
-    <div className="w-24 md:w-64 h-full bg-white border-r border-gray-100 flex flex-col transition-all">
+    <div className="w-24 md:w-64 h-full bg-white border-r border-gray-100 flex flex-col transition-all no-print">
       {/* USUÁRIO E LOGO */}
       <div className="p-8 space-y-8">
         <div className="flex items-center space-x-3">

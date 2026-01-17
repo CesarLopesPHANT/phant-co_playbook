@@ -33,6 +33,37 @@ const App: React.FC = () => {
 
   const retryCountRef = useRef(0);
 
+  // Roteamento baseado em URL para links externos (Google OAuth)
+  useEffect(() => {
+    const handleRouting = () => {
+      const params = new URLSearchParams(window.location.search);
+      const page = params.get('page');
+      
+      if (page === 'privacy') {
+        setLegalView('privacy');
+      } else if (page === 'terms') {
+        setLegalView('terms');
+      } else {
+        setLegalView(null);
+      }
+    };
+
+    handleRouting();
+    window.addEventListener('popstate', handleRouting);
+    return () => window.removeEventListener('popstate', handleRouting);
+  }, []);
+
+  const navigateToLegal = (view: 'privacy' | 'terms' | null) => {
+    const url = new URL(window.location.href);
+    if (view) {
+      url.searchParams.set('page', view);
+    } else {
+      url.searchParams.delete('page');
+    }
+    window.history.pushState({}, '', url.toString());
+    setLegalView(view);
+  };
+
   useEffect(() => {
     // Carregar configurações de marca
     SupabaseService.fetchAppConfig().then(config => {
@@ -50,10 +81,19 @@ const App: React.FC = () => {
 
       if (errorCode || errorDesc) {
         let msg = errorDesc || errorCode || "Erro na autenticação.";
-        if (errorDesc.includes('access_denied') || errorCode === '403') {
-          msg = "ERRO 403: AMBIENTE DE PREVIEW NÃO AUTORIZADO. Como você está em um ambiente de testes, o Google exige que esta URL exata esteja cadastrada nos URIs de Redirecionamento.";
+        
+        // Tratamento específico para o erro de banco de dados (Trigger/Profiles)
+        if (errorDesc.includes('database error') || errorDesc.includes('unexpected_failure')) {
+          msg = "ERRO DE BANCO DE DADOS: O Supabase não conseguiu criar seu perfil. Verifique se a tabela 'public.profiles' existe e se o Trigger de cadastro está configurado como 'SECURITY DEFINER'.";
+        } else if (errorDesc.includes('access_denied') || errorCode === '403') {
+          msg = "ERRO 403: AMBIENTE DE PREVIEW NÃO AUTORIZADO. O Google exige que esta URL exata esteja cadastrada nos URIs de Redirecionamento.";
         }
+        
         setAuthError(msg);
+        setLoading(false); // Interrompe a tela branca de carregamento
+        setIsProcessing(false);
+        
+        // Limpa a URL para evitar reprocessamento do erro ao dar F5
         window.history.replaceState({}, document.title, window.location.origin + window.location.pathname);
       }
     };
@@ -105,7 +145,7 @@ const App: React.FC = () => {
       } else {
         setLoading(false);
       }
-    });
+    }).catch(() => setLoading(false));
 
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, newSession) => {
       if (newSession && (event === 'SIGNED_IN' || event === 'INITIAL_SESSION')) {
@@ -154,12 +194,6 @@ const App: React.FC = () => {
     }
   };
 
-  const copyRedirectUri = () => {
-    const uri = `${getAppOrigin()}/`;
-    navigator.clipboard.writeText(uri);
-    alert("URL Copiada: " + uri);
-  };
-
   if (loading || (session && !userProfile)) {
     return (
       <div className="h-screen w-full flex items-center justify-center bg-gray-50">
@@ -167,24 +201,22 @@ const App: React.FC = () => {
           <div className="w-16 h-16 bg-black rounded-[24px] animate-bounce shadow-2xl flex items-center justify-center">
              <div className="w-4 h-4 bg-white rounded-full"></div>
           </div>
-          <div className="flex flex-col items-center text-center">
+          <div className="flex flex-col items-center text-center px-6">
             <span className="text-[11px] font-black text-gray-900 uppercase tracking-[0.4em]">Sincronizando Acesso</span>
-            <span className="text-[9px] font-bold text-gray-400 uppercase tracking-widest mt-2 animate-pulse">
-              Validando credenciais seguras...
-            </span>
+            <p className="text-[9px] text-gray-400 mt-2 font-bold uppercase tracking-widest">Validando credenciais de segurança</p>
           </div>
         </div>
       </div>
     );
   }
 
-  // Visualização de Página Independente para Termos/Privacidade (Fora do Login)
+  // Visualização de Página Independente para Termos/Privacidade (Fora do Login ou via URL direta)
   if (legalView) {
     return (
       <div className="min-h-screen bg-gray-50 overflow-y-auto custom-scrollbar animate-in fade-in duration-300">
         <div className="max-w-4xl mx-auto py-20 px-6 relative">
           <button 
-            onClick={() => setLegalView(null)}
+            onClick={() => navigateToLegal(null)}
             className="sticky top-0 z-10 mb-12 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-black transition-colors bg-gray-50/80 backdrop-blur-sm py-4 w-full"
           >
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M15 19l-7-7 7-7"/></svg>
@@ -203,14 +235,14 @@ const App: React.FC = () => {
       </p>
       <div className="flex items-center gap-6">
         <button 
-          onClick={() => session ? setSelectedModuleId('privacy_policy') : setLegalView('privacy')}
+          onClick={() => navigateToLegal('privacy')}
           className="text-[10px] font-black text-gray-300 uppercase tracking-widest hover:text-brand transition-colors"
         >
           Privacidade
         </button>
         <div className="w-1 h-1 rounded-full bg-gray-200"></div>
         <button 
-          onClick={() => session ? setSelectedModuleId('terms_of_service') : setLegalView('terms')}
+          onClick={() => navigateToLegal('terms')}
           className="text-[10px] font-black text-gray-300 uppercase tracking-widest hover:text-brand transition-colors"
         >
           Termos de Uso
@@ -227,21 +259,9 @@ const App: React.FC = () => {
       .text-brand { color: var(--brand-primary) !important; }
       .bg-brand { background-color: var(--brand-primary) !important; }
       .border-brand { border-color: var(--brand-primary) !important; }
-      
-      .hover\\:bg-brand:hover { background-color: var(--brand-primary) !important; opacity: 0.9; }
-      .hover\\:text-brand:hover { color: var(--brand-primary) !important; }
-      .focus\\:border-brand:focus { border-color: var(--brand-primary) !important; }
-      
       .text-blue-600, .text-blue-500 { color: var(--brand-primary) !important; }
       .bg-blue-600, .bg-blue-500 { background-color: var(--brand-primary) !important; }
       .bg-blue-50 { background-color: color-mix(in srgb, var(--brand-primary), white 92%) !important; }
-      .border-blue-600, .border-blue-500, .border-blue-100 { border-color: color-mix(in srgb, var(--brand-primary), white 80%) !important; }
-      
-      .hover\\:bg-blue-700:hover, .hover\\:bg-blue-600:hover { background-color: var(--brand-primary) !important; filter: brightness(0.9); }
-      
-      .shadow-brand\\/20 { 
-        box-shadow: 0 10px 15px -3px color-mix(in srgb, var(--brand-primary), transparent 80%), 0 4px 6px -4px color-mix(in srgb, var(--brand-primary), transparent 80%) !important; 
-      }
     `}</style>
   );
 
@@ -274,10 +294,10 @@ const App: React.FC = () => {
                 <span className="text-2xl">⚠️</span>
                 <span className="max-w-[280px]">{authError}</span>
                 <button 
-                  onClick={copyRedirectUri}
-                  className="bg-white text-red-600 border border-red-200 px-5 py-3 rounded-full text-[9px] hover:bg-red-600 hover:text-white transition-all shadow-sm font-black"
+                  onClick={() => setAuthError(null)}
+                  className="mt-2 text-[8px] font-black text-red-400 border-b border-red-200 uppercase tracking-[0.2em] hover:text-red-600"
                 >
-                  COPIAR URL DE REDIRECIONAMENTO
+                  Tentar novamente
                 </button>
               </div>
             )}
@@ -404,20 +424,6 @@ const App: React.FC = () => {
         <AppFooter />
       </main>
       <AIAssistant currentRole={currentRole} />
-
-      {userProfile?.role === 'MASTER' && (
-        <div className="fixed bottom-6 left-6 flex items-center space-x-1 bg-white/90 backdrop-blur-xl p-1.5 rounded-2xl border border-gray-100 shadow-2xl z-[70]">
-          {(['MASTER', 'USER'] as UserRole[]).map(role => (
-            <button 
-              key={role}
-              onClick={() => setCurrentRole(role)}
-              className={`px-4 py-2 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${currentRole === role ? 'bg-black text-white shadow-lg' : 'text-gray-400 hover:text-black hover:bg-gray-100'}`}
-            >
-              {role}
-            </button>
-          ))}
-        </div>
-      )}
     </div>
   );
 };

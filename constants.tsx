@@ -39,30 +39,6 @@ export const PLAYBOOK_STRUCTURE: PlaybookModule[] = [
     permissions: ['MASTER', 'USER']
   },
   {
-    id: 'privacy_policy',
-    category: 'BASE',
-    title: 'Privacidade',
-    description: 'Como protegemos seus dados e sua estratégia.',
-    status: 'ATIVA',
-    version: '1.0',
-    source: 'Manual',
-    type: 'page',
-    icon: 'scripts',
-    permissions: ['MASTER', 'USER']
-  },
-  {
-    id: 'terms_of_service',
-    category: 'BASE',
-    title: 'Termos de Uso',
-    description: 'Contrato de utilização da plataforma.',
-    status: 'ATIVA',
-    version: '1.0',
-    source: 'Manual',
-    type: 'page',
-    icon: 'scripts',
-    permissions: ['MASTER', 'USER']
-  },
-  {
     id: 'playbook_guia',
     category: 'BASE',
     title: 'O Playbook',

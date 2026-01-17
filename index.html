@@ -25,106 +25,76 @@
             border-radius: 10px;
         }
 
-        /* ESTILO VISUAL DO PREVIEW (SIMULAÇÃO A4) */
         .proposal-preview-area section.printable-page {
             box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
             margin-bottom: 40px;
             transition: transform 0.3s ease;
         }
 
-        /* PLUGIN DE IMPRESSÃO PHANT - ISOLAMENTO TOTAL */
-        @media print, .is-printing {
+        /* PLUGIN DE IMPRESSÃO PHANT - ISOLAMENTO RADICAL */
+        @media print {
             @page {
                 size: A4;
                 margin: 0;
             }
             
-            /* Reset radical para ignorar o layout da aplicação */
-            html, body {
-                width: 210mm !important;
-                height: auto !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                background: #fff !important;
-                overflow: visible !important;
-                display: block !important;
-            }
-
-            /* Esconde toda a interface administrativa */
-            .no-print, 
-            nav, 
-            aside, 
-            button, 
-            header,
-            footer,
-            .assistant-btn,
-            .fixed,
-            .sidebar-main,
-            div[class*="lg:w-[450px]"],
-            div[class*="sticky"] {
+            /* 1. Esconde absolutamente tudo por padrão */
+            html, body, #root, #root > div, main, aside, nav, footer, button, .no-print {
                 display: none !important;
-                height: 0 !important;
-                width: 0 !important;
-                visibility: hidden !important;
-                opacity: 0 !important;
+                height: auto !important;
+                overflow: visible !important;
             }
 
-            /* Força o reset de flexbox e overflow de todos os containers pais */
-            #root, 
-            #root > div,
-            main, 
-            .proposal-preview-area,
-            .proposal-preview-area > div {
+            /* 2. Habilita apenas o caminho até a proposta */
+            html, body, #root, #root > div, main, 
+            .proposal-preview-area, 
+            .proposal-container,
+            .proposal-container *,
+            section.printable-page,
+            section.printable-page * {
                 display: block !important;
                 visibility: visible !important;
                 position: static !important;
-                width: 210mm !important;
+                width: auto !important;
                 height: auto !important;
-                min-height: auto !important;
                 margin: 0 !important;
                 padding: 0 !important;
-                overflow: visible !important;
                 background: none !important;
                 box-shadow: none !important;
                 border: none !important;
-                max-width: none !important;
+                overflow: visible !important;
             }
 
-            /* Container específico da proposta (.proposal-container) */
+            /* 3. Força o tamanho real A4 no container da proposta */
             .proposal-container {
-                display: block !important;
-                visibility: visible !important;
-                transform: none !important; /* CRÍTICO: Anula o zoom da interface */
                 width: 210mm !important;
-                margin: 0 !important;
-                padding: 0 !important;
-                position: static !important;
+                transform: none !important; /* Remove o zoom da UI */
+                margin: 0 auto !important;
             }
 
-            /* Quebra de página e dimensões físicas A4 */
-            section.printable-page, .print-break-after {
+            /* 4. Estilização das páginas físicas */
+            section.printable-page {
                 display: flex !important;
                 flex-direction: column !important;
                 width: 210mm !important;
-                height: 297mm !important; /* Altura A4 exata */
-                margin: 0 !important;
+                height: 297mm !important;
                 padding: 20mm !important;
                 page-break-after: always !important;
                 page-break-inside: avoid !important;
                 position: relative !important;
                 background-color: white !important;
+                box-sizing: border-box !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
-                box-sizing: border-box !important;
-                box-shadow: none !important;
             }
 
-            /* Cores de fundo forçadas */
+            /* Especial para fundos escuros */
             section.printable-page.bg-black {
                 background-color: black !important;
                 color: white !important;
             }
-            
+
+            /* Garante que imagens e fundos apareçam */
             * {
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;

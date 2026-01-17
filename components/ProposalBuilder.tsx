@@ -3,6 +3,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { ProposalItem, StrategicMapItem, ProposalMetadata, SolutionItem, ProposalRecord, AppCustomization } from '../types';
 import { generateStrategicMapping, improveObservationText } from '../services/gemini';
 import { SupabaseService } from '../services/api';
+import ProposalPresentation from './ProposalPresentation';
 
 interface ProposalBuilderProps {
   appConfig: AppCustomization;
@@ -41,6 +42,7 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
   const [activeTab, setActiveTab] = useState<'info' | 'solutions' | 'mapping' | 'history'>('info');
   const [zoom, setZoom] = useState(0.45);
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [showPresentation, setShowPresentation] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
   const previewRef = useRef<HTMLDivElement>(null);
 
@@ -111,13 +113,17 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
   };
 
   const handlePrint = () => {
+    // Adiciona classe de impressão ao body
     document.body.classList.add("is-printing");
+    
+    // Pequeno delay para garantir que o CSS media print seja interpretado
     setTimeout(() => {
       window.print();
+      // Remove após o fechamento da caixa de diálogo de impressão
       setTimeout(() => {
         document.body.classList.remove("is-printing");
       }, 500);
-    }, 50);
+    }, 100);
   };
 
   const handleExport = async () => {
@@ -193,6 +199,16 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
   return (
     <div className={`flex flex-col lg:flex-row gap-8 animate-in fade-in duration-700 ${isFullscreen ? 'fixed inset-0 z-[100] bg-[#1a1a1a] p-0 overflow-hidden' : ''}`}>
       
+      {showPresentation && (
+        <ProposalPresentation 
+          metadata={metadata} 
+          items={proposalItems} 
+          strategicMap={strategicMap} 
+          appConfig={appConfig}
+          onClose={() => setShowPresentation(false)}
+        />
+      )}
+
       {!isFullscreen && (
         <div className="w-full lg:w-[450px] space-y-8 no-print shrink-0">
           <header className="space-y-2">
@@ -357,7 +373,7 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
               )}
             </div>
 
-            <div className="p-8 bg-black text-white space-y-6 no-print">
+            <div className="p-8 bg-black text-white space-y-4 no-print">
               <div className="space-y-2">
                  <div className="flex justify-between items-center">
                     <label className="text-[9px] font-black text-white/40 uppercase tracking-widest">Observações extras</label>
@@ -376,15 +392,23 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
                   <span className="text-3xl font-black tracking-tighter">{formatCurrency(total)}</span>
               </div>
               
-              <button 
-                onClick={handleExport} 
-                disabled={exportStatus !== 'idle'}
-                className="w-full py-5 bg-brand text-white rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] shadow-xl hover:scale-105 transition-all disabled:opacity-50 flex items-center justify-center gap-3"
-              >
-                {exportStatus === 'saving' ? 'SALVANDO...' : 
-                 exportStatus === 'ready' ? 'SUCESSO! IMPRIMINDO...' : 
-                 'SALVAR E GERAR PDF'}
-              </button>
+              <div className="grid grid-cols-1 gap-2">
+                <button 
+                  onClick={handleExport} 
+                  disabled={exportStatus !== 'idle'}
+                  className="w-full py-4 bg-emerald-600 text-white rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] shadow-xl hover:scale-105 transition-all disabled:opacity-50 flex items-center justify-center gap-3"
+                >
+                  {exportStatus === 'saving' ? 'SALVANDO...' : 
+                   exportStatus === 'ready' ? 'SUCESSO! IMPRIMINDO...' : 
+                   'SALVAR E GERAR PDF'}
+                </button>
+                <button 
+                  onClick={() => setShowPresentation(true)}
+                  className="w-full py-4 bg-[#6113cc] text-white rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] shadow-xl hover:scale-105 transition-all flex items-center justify-center gap-3"
+                >
+                  🖥️ GERAR APRESENTAÇÃO
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -538,7 +562,7 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
                           <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-300">Entregáveis</h4>
                           <ul className="space-y-2">
                               {(item.deliverables || ['Implementação Técnica', 'Relatório de Performance']).map((d, idx) => (
-                                <li key={idx} className="flex items-center gap-2 text-[10px] font-bold">
+                                <li key={idx} className="flex items-center gap-3 text-xs font-bold">
                                   <span className="w-1.5 h-1.5 bg-brand rounded-full"></span>
                                   {d}
                                 </li>
