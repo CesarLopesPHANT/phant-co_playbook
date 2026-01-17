@@ -158,8 +158,10 @@ const PlaybookEditor: React.FC<PlaybookEditorProps> = ({ module, currentRole, on
           {['Todos', 'Marca & Cultura', 'Crescimento (Growth)', 'Tecnologia', 'Cursos & Mentorias'].map(sub => (
             <button
               key={sub}
+              // Fixed: replaced setActiveTab with setActiveSubcategory
               onClick={() => setActiveSubcategory(sub)}
               className={`px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${
+                // Fixed: replaced activeTab with activeSubcategory
                 activeSubcategory === sub ? 'bg-black text-white shadow-lg' : 'bg-white border border-gray-100 text-gray-400 hover:text-black hover:border-black/10'
               }`}
             >

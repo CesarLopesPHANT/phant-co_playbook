@@ -21,7 +21,7 @@ const App: React.FC = () => {
     primaryColor: '#2563eb'
   });
   
-  // Auth & Legal View State
+  // Auth & View States
   const [authView, setAuthView] = useState<'options' | 'email-login' | 'email-signup'>('options');
   const [legalView, setLegalView] = useState<'privacy' | 'terms' | null>(null);
   const [email, setEmail] = useState('');
@@ -177,21 +177,23 @@ const App: React.FC = () => {
     );
   }
 
-  // Overlay Legal
-  const LegalOverlay = () => (
-    <div className="fixed inset-0 bg-gray-50 z-[200] overflow-y-auto custom-scrollbar animate-in fade-in duration-300">
-      <div className="max-w-4xl mx-auto py-20 px-6 relative">
-        <button 
-          onClick={() => setLegalView(null)}
-          className="sticky top-0 z-10 mb-12 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-black transition-colors bg-gray-50/80 backdrop-blur-sm py-4 w-full"
-        >
-          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M15 19l-7-7 7-7"/></svg>
-          Fechar e Voltar
-        </button>
-        {legalView === 'privacy' ? <PrivacyPolicy /> : <TermsOfService />}
+  // Visualização de Página Independente para Termos/Privacidade (Fora do Login)
+  if (legalView) {
+    return (
+      <div className="min-h-screen bg-gray-50 overflow-y-auto custom-scrollbar animate-in fade-in duration-300">
+        <div className="max-w-4xl mx-auto py-20 px-6 relative">
+          <button 
+            onClick={() => setLegalView(null)}
+            className="sticky top-0 z-10 mb-12 flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-black transition-colors bg-gray-50/80 backdrop-blur-sm py-4 w-full"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M15 19l-7-7 7-7"/></svg>
+            Voltar para o Início
+          </button>
+          {legalView === 'privacy' ? <PrivacyPolicy /> : <TermsOfService />}
+        </div>
       </div>
-    </div>
-  );
+    );
+  }
 
   const AppFooter = () => (
     <footer className="mt-auto pt-12 pb-8 flex flex-col md:flex-row items-center justify-between gap-6 no-print w-full max-w-[1600px] mx-auto px-8 border-t border-gray-100">
@@ -200,14 +202,14 @@ const App: React.FC = () => {
       </p>
       <div className="flex items-center gap-6">
         <button 
-          onClick={() => setLegalView('privacy')}
+          onClick={() => session ? setSelectedModuleId('privacy_policy') : setLegalView('privacy')}
           className="text-[10px] font-black text-gray-300 uppercase tracking-widest hover:text-brand transition-colors"
         >
           Privacidade
         </button>
         <div className="w-1 h-1 rounded-full bg-gray-200"></div>
         <button 
-          onClick={() => setLegalView('terms')}
+          onClick={() => session ? setSelectedModuleId('terms_of_service') : setLegalView('terms')}
           className="text-[10px] font-black text-gray-300 uppercase tracking-widest hover:text-brand transition-colors"
         >
           Termos de Uso
@@ -229,7 +231,6 @@ const App: React.FC = () => {
       .hover\\:text-brand:hover { color: var(--brand-primary) !important; }
       .focus\\:border-brand:focus { border-color: var(--brand-primary) !important; }
       
-      /* Sobrescrita agressiva para classes comuns de azul usadas no layout */
       .text-blue-600, .text-blue-500 { color: var(--brand-primary) !important; }
       .bg-blue-600, .bg-blue-500 { background-color: var(--brand-primary) !important; }
       .bg-blue-50 { background-color: color-mix(in srgb, var(--brand-primary), white 92%) !important; }
@@ -247,7 +248,6 @@ const App: React.FC = () => {
     return (
       <div className="min-h-screen w-full flex flex-col bg-gray-50 overflow-y-auto">
         <ThemeStyles />
-        {legalView && <LegalOverlay />}
         
         <div className="flex-1 flex flex-col items-center justify-center p-6 py-12">
           <div className="max-w-md w-full bg-white p-12 rounded-[60px] shadow-2xl space-y-10 border border-gray-100 text-center animate-in zoom-in-95 duration-500 my-8">
@@ -375,7 +375,6 @@ const App: React.FC = () => {
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden font-sans selection:bg-blue-100 selection:text-blue-900">
       <ThemeStyles />
-      {legalView && <LegalOverlay />}
       <Sidebar 
         modules={PLAYBOOK_STRUCTURE} 
         selectedModuleId={selectedModuleId} 

@@ -28,20 +28,19 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ currentRole }) => {
     const userMsg = input.trim();
     setInput('');
     
-    // Adiciona mensagem do usuário
-    const updatedMessages = [...messages, { role: 'user', content: userMsg } as ChatMessage];
+    const updatedMessages = [...messages, { role: 'user', content: userMsg }];
     setMessages(updatedMessages);
     setIsLoading(true);
 
-    // Placeholder para a resposta da IA que será preenchida via stream
+    // Initial empty message for the assistant
     setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
 
-    const fullPrompt = `Contexto: O usuário atual é um ${currentRole}. 
-    Pergunta: ${userMsg}
-    Por favor, forneça dicas práticas e diretas para fechar a venda.`;
+    const fullPrompt = `Você é um Mentor Comercial PhantLab. Ajude um usuário com cargo de ${currentRole}. 
+    Usuário: ${userMsg}
+    Forneça uma resposta prática, curta e orientada a fechamento de vendas.`;
 
     try {
-      await getSalesMentorStream(fullPrompt, (chunkText) => {
+      const result = await getSalesMentorStream(fullPrompt, (chunkText) => {
         setMessages(prev => {
           const newMsgs = [...prev];
           const lastMsg = newMsgs[newMsgs.length - 1];
@@ -51,8 +50,21 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ currentRole }) => {
           return newMsgs;
         });
       });
+
+      if (!result) {
+        // If result is empty, it means an error occurred and was handled in getSalesMentorStream
+        // but we might want to ensure the loading state is cleared and a placeholder is removed if empty
+      }
     } catch (error) {
-      console.error(error);
+      console.error("Chat Error:", error);
+      setMessages(prev => {
+        const newMsgs = [...prev];
+        const lastMsg = newMsgs[newMsgs.length - 1];
+        if (lastMsg && lastMsg.role === 'assistant' && !lastMsg.content) {
+          lastMsg.content = "Ocorreu um erro na comunicação. Por favor, tente novamente em alguns instantes.";
+        }
+        return newMsgs;
+      });
     } finally {
       setIsLoading(false);
     }
