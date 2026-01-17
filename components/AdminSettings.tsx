@@ -16,7 +16,8 @@ const AdminSettings: React.FC = () => {
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const logoInputRef = useRef<HTMLInputElement>(null);
+  const systemLogoInputRef = useRef<HTMLInputElement>(null);
+  const proposalLogoInputRef = useRef<HTMLInputElement>(null);
 
   const [aiConfig, setAiConfig] = useState<AIConfig>({
     systemInstruction: "",
@@ -27,7 +28,8 @@ const AdminSettings: React.FC = () => {
 
   const [appConfig, setAppConfig] = useState<AppCustomization>({
     companyName: "PhantLab",
-    logoUrl: "",
+    systemLogoUrl: "http://phant.com.br/uploads/simbolo_roxo.png",
+    proposalLogoUrl: "http://phant.com.br/uploads/logo_black.png",
     primaryColor: "#2563eb"
   });
 
@@ -87,7 +89,7 @@ const AdminSettings: React.FC = () => {
     }
   };
 
-  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'system' | 'proposal') => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -98,7 +100,11 @@ const AdminSettings: React.FC = () => {
 
     const reader = new FileReader();
     reader.onloadend = () => {
-      setAppConfig(prev => ({ ...prev, logoUrl: reader.result as string }));
+      if (type === 'system') {
+        setAppConfig(prev => ({ ...prev, systemLogoUrl: reader.result as string }));
+      } else {
+        setAppConfig(prev => ({ ...prev, proposalLogoUrl: reader.result as string }));
+      }
       showToast("Logo carregado localmente. Clique em Aplicar para salvar.");
     };
     reader.readAsDataURL(file);
@@ -364,23 +370,43 @@ const AdminSettings: React.FC = () => {
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-12 items-start">
-                  <div className="space-y-4">
-                    <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-4">Anexar Logo</label>
-                    <div 
-                      onClick={() => logoInputRef.current?.click()}
-                      className="w-full h-48 bg-gray-50 border-2 border-dashed border-gray-200 rounded-[32px] flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 hover:border-brand transition-all overflow-hidden"
-                    >
-                      {appConfig.logoUrl ? (
-                        <img src={appConfig.logoUrl} alt="Preview" className="w-full h-full object-contain p-4" />
-                      ) : (
-                        <div className="text-center space-y-2">
-                          <span className="text-3xl">🖼️</span>
-                          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Clique para enviar</p>
-                        </div>
-                      )}
+                  <div className="space-y-6">
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-4">Logo do Sistema (Interface)</label>
+                      <div 
+                        onClick={() => systemLogoInputRef.current?.click()}
+                        className="w-full h-40 bg-gray-50 border-2 border-dashed border-gray-200 rounded-[32px] flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 hover:border-brand transition-all overflow-hidden"
+                      >
+                        {appConfig.systemLogoUrl ? (
+                          <img src={appConfig.systemLogoUrl} alt="Preview Sistema" className="w-full h-full object-contain p-4" />
+                        ) : (
+                          <div className="text-center space-y-2">
+                            <span className="text-3xl">🖼️</span>
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Logo Sistema</p>
+                          </div>
+                        )}
+                      </div>
+                      <input type="file" ref={systemLogoInputRef} onChange={e => handleLogoUpload(e, 'system')} accept="image/*" className="hidden" />
                     </div>
-                    <input type="file" ref={logoInputRef} onChange={handleLogoUpload} accept="image/*" className="hidden" />
-                    <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest text-center">Tamanho recomendado: Máx 1MB (PNG/SVG)</p>
+
+                    <div className="space-y-2">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-4">Logo da Proposta (PDF)</label>
+                      <div 
+                        onClick={() => proposalLogoInputRef.current?.click()}
+                        className="w-full h-40 bg-gray-50 border-2 border-dashed border-gray-200 rounded-[32px] flex flex-col items-center justify-center cursor-pointer hover:bg-gray-100 hover:border-brand transition-all overflow-hidden"
+                      >
+                        {appConfig.proposalLogoUrl ? (
+                          <img src={appConfig.proposalLogoUrl} alt="Preview Proposta" className="w-full h-full object-contain p-4" />
+                        ) : (
+                          <div className="text-center space-y-2">
+                            <span className="text-3xl">📄</span>
+                            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Logo Proposta</p>
+                          </div>
+                        )}
+                      </div>
+                      <input type="file" ref={proposalLogoInputRef} onChange={e => handleLogoUpload(e, 'proposal')} accept="image/*" className="hidden" />
+                    </div>
+                    <p className="text-[9px] text-gray-400 font-bold uppercase tracking-widest text-center">Máx 1MB (PNG/SVG/JPG)</p>
                   </div>
 
                   <div className="space-y-8">

@@ -79,7 +79,8 @@ export interface ProposalRecord {
 
 export interface AppCustomization {
   companyName: string;
-  logoUrl: string;
+  systemLogoUrl: string;
+  proposalLogoUrl: string;
   primaryColor: string;
 }
 

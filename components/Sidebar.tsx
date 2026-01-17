@@ -44,11 +44,13 @@ const Sidebar: React.FC<SidebarProps> = ({ modules, selectedModuleId, onSelectMo
       {/* USUÁRIO E LOGO */}
       <div className="p-8 space-y-8">
         <div className="flex items-center space-x-3">
-          <div className="w-10 h-10 bg-black rounded-xl flex items-center justify-center text-white font-bold text-base shadow-lg shrink-0 overflow-hidden">
-             {appConfig?.logoUrl ? (
-               <img src={appConfig.logoUrl} alt="Logo" className="w-full h-full object-contain p-1 bg-white" />
+          <div className="w-12 h-12 flex items-center justify-center shrink-0 overflow-hidden">
+             {appConfig?.systemLogoUrl ? (
+               <img src={appConfig.systemLogoUrl} alt="Logo" className="w-full h-full object-contain" />
              ) : (
-               appConfig?.companyName.charAt(0) || 'P'
+               <div className="w-full h-full bg-black rounded-xl flex items-center justify-center text-white font-bold text-xl shadow-lg">
+                {appConfig?.companyName.charAt(0) || 'P'}
+               </div>
              )}
           </div>
           <div className="hidden md:block overflow-hidden">

@@ -17,7 +17,8 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [appConfig, setAppConfig] = useState<AppCustomization>({
     companyName: 'PhantLab',
-    logoUrl: '',
+    systemLogoUrl: 'http://phant.com.br/uploads/simbolo_roxo.png',
+    proposalLogoUrl: 'http://phant.com.br/uploads/logo_black.png',
     primaryColor: '#2563eb'
   });
   
@@ -251,11 +252,13 @@ const App: React.FC = () => {
         
         <div className="flex-1 flex flex-col items-center justify-center p-6 py-12">
           <div className="max-w-md w-full bg-white p-12 rounded-[60px] shadow-2xl space-y-10 border border-gray-100 text-center animate-in zoom-in-95 duration-500 my-8">
-            <div className="w-20 h-20 bg-black rounded-[30px] flex items-center justify-center text-white text-3xl font-black mx-auto shadow-xl overflow-hidden">
-               {appConfig.logoUrl ? (
-                 <img src={appConfig.logoUrl} alt="Logo" className="w-full h-full object-contain p-2 bg-white" />
+            <div className="w-40 h-40 flex items-center justify-center mx-auto overflow-hidden">
+               {appConfig.systemLogoUrl ? (
+                 <img src={appConfig.systemLogoUrl} alt="Logo" className="w-full h-full object-contain" />
                ) : (
-                 appConfig.companyName.charAt(0)
+                 <div className="w-full h-full bg-black rounded-[40px] flex items-center justify-center text-white text-5xl font-black shadow-xl">
+                    {appConfig.companyName.charAt(0)}
+                 </div>
                )}
             </div>
             

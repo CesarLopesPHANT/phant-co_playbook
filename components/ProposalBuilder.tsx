@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { ProposalItem, StrategicMapItem, ProposalMetadata, SolutionItem, ProposalRecord, AppCustomization } from '../types';
 import { generateStrategicMapping, improveObservationText } from '../services/gemini';
@@ -421,8 +422,8 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
             <PhantPattern />
             <div className="relative z-10 flex justify-between items-start">
               <div className="w-16 h-16 bg-white rounded-xl overflow-hidden flex items-center justify-center text-black font-black text-4xl">
-                 {appConfig.logoUrl ? (
-                   <img src={appConfig.logoUrl} alt="Logo" className="w-full h-full object-contain p-2" />
+                 {appConfig.proposalLogoUrl ? (
+                   <img src={appConfig.proposalLogoUrl} alt="Logo" className="w-full h-full object-contain p-2" />
                  ) : (
                    appConfig.companyName.charAt(0) || 'P'
                  )}
@@ -493,8 +494,8 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
                   </div>
                 </div>
                 <div className="w-12 h-12 bg-brand rounded-xl overflow-hidden flex items-center justify-center text-white font-black text-2xl">
-                   {appConfig.logoUrl ? (
-                     <img src={appConfig.logoUrl} alt="Logo" className="w-full h-full object-contain p-2" />
+                   {appConfig.proposalLogoUrl ? (
+                     <img src={appConfig.proposalLogoUrl} alt="Logo" className="w-full h-full object-contain p-2" />
                    ) : (
                      appConfig.companyName.charAt(0) || 'P'
                    )}
