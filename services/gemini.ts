@@ -3,8 +3,20 @@ import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { SolutionItem, AIConfig, StrategicMapItem, ProposalMetadata } from "../types";
 import { SupabaseService } from "./api";
 
+// Safely access process.env
+const getEnvVar = (key: string) => {
+  try {
+    if (typeof process !== 'undefined' && process.env) {
+      return process.env[key];
+    }
+  } catch (e) {
+    // ignore error
+  }
+  return undefined;
+};
+
 const getAIInstance = () => {
-  const apiKey = process.env.API_KEY;
+  const apiKey = getEnvVar('API_KEY');
   if (!apiKey) {
     throw new Error("API_KEY is not defined in the environment.");
   }

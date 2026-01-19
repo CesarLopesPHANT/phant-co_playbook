@@ -1,9 +1,9 @@
 
-import React, { useState, useEffect } from 'react';
-import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
+import React, { useState, useEffect, useMemo } from 'react';
+import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts';
 import { SALES_PERFORMANCE } from '../constants';
 import { SupabaseService, GoogleApiService } from '../services/api';
-import { SolutionItem } from '../types';
+import { SolutionItem, ProposalRecord } from '../types';
 
 interface CalendarEvent {
   id: string;
@@ -12,26 +12,86 @@ interface CalendarEvent {
   end: { dateTime?: string; date?: string };
 }
 
+interface ProductRank {
+  name: string;
+  count: number;
+}
+
+const RITUALS_BY_DAY: Record<number, string[]> = {
+  0: [ // Domingo
+    'Planejar agenda da semana',
+    'Revisar leituras pendentes',
+    'Organizar ambiente de trabalho',
+    'Mentalização de metas semanais'
+  ],
+  1: [ // Segunda - Prospecção e Abertura
+    'Validar 5 Leads nos critérios de "Alto Potencial"',
+    'Executar 10 Follow-ups de abertura',
+    'Revisar e limpar CRM (Leads frios)',
+    'Postar conteúdo de autoridade no LinkedIn'
+  ],
+  2: [ // Terça - Qualificação
+    'Realizar 3 reuniões de Diagnóstico',
+    'Estudar Diferenciais de uma Solução "Advanced"',
+    'Confirmar agendas de Quarta e Quinta',
+    'Refinar scripts de quebra de objeção'
+  ],
+  3: [ // Quarta - Proposta e Negociação
+    'Gerar 3 Simulações de Proposta no Sistema',
+    'Apresentar propostas para decisores',
+    'Enviar materiais de apoio (Fichário) para leads mornos',
+    'Analisar funil de vendas'
+  ],
+  4: [ // Quinta - Follow-up Intensivo
+    'Executar 10 Follow-ups ativos (Resgate)',
+    'Pedir indicações para clientes atuais',
+    'Verificar pagamentos pendentes',
+    'Alinhar entregas com time técnico'
+  ],
+  5: [ // Sexta - Fechamento e Review
+    'Garantir assinaturas de contratos pendentes',
+    'Atualizar forecast do mês',
+    'Review semanal de performance',
+    'Zerar caixa de entrada de e-mails'
+  ],
+  6: [ // Sábado
+    'Descanso estratégico',
+    'Estudo livre de mercado',
+    'Networking informal',
+    'Review pessoal'
+  ]
+};
+
 const SalesDashboard: React.FC = () => {
   const [solutions, setSolutions] = useState<SolutionItem[]>([]);
-  const [proposalsCount, setProposalsCount] = useState(0);
+  const [history, setHistory] = useState<ProposalRecord[]>([]);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
-  const [checkpoints, setCheckpoints] = useState([
-    { id: 1, text: 'Validar 5 Leads nos critérios de "Alto Potencial"', done: false },
-    { id: 2, text: 'Estudar Diferenciais de uma Solução "Advanced"', done: false },
-    { id: 3, text: 'Gerar 3 Simulações de Proposta no Sistema', done: false },
-    { id: 4, text: 'Executar 10 Follow-ups ativos', done: false },
-  ]);
-
-  const slaMeta = { base: 5, super: 10 };
+  const [currentMonthTarget, setCurrentMonthTarget] = useState(0);
+  
+  // Estado para Ritos Dinâmicos
+  const [checkpoints, setCheckpoints] = useState<{id: number, text: string, done: boolean}[]>([]);
 
   useEffect(() => {
     const load = async () => {
+      // Carregar Soluções
       const data = await SupabaseService.fetchSolutions();
       setSolutions(data || []);
-      const savedProposals = JSON.parse(localStorage.getItem('phant_current_proposal') || '[]');
-      setProposalsCount(savedProposals.length);
+      
+      // Carregar Histórico Real
+      const hist = await SupabaseService.fetchProposalsHistory();
+      setHistory(hist || []);
+
+      // Carregar Metas do Mês
+      const goals = await SupabaseService.fetchGoals();
+      const currentKey = new Date().toISOString().slice(0, 7);
+      const target = goals.find(g => g.month === currentKey)?.target || 0;
+      setCurrentMonthTarget(target);
+
+      // Configurar Ritos do Dia
+      const today = new Date().getDay();
+      const todaysRituals = RITUALS_BY_DAY[today] || RITUALS_BY_DAY[1];
+      setCheckpoints(todaysRituals.map((text, idx) => ({ id: idx, text, done: false })));
       
       // Busca agenda real do Google
       setIsLoadingEvents(true);
@@ -46,13 +106,64 @@ const SalesDashboard: React.FC = () => {
     setCheckpoints(prev => prev.map(c => c.id === id ? { ...c, done: !c.done } : c));
   };
 
-  const progressToSuper = Math.min((proposalsCount / slaMeta.super) * 100, 100);
+  // Cálculos Derivados
+  const totalPipelineValue = useMemo(() => {
+    return history.reduce((acc, curr) => acc + (curr.total_value || 0), 0);
+  }, [history]);
+
+  // Filtra apenas o realizado no mês atual para o gráfico de progresso
+  const currentMonthRealized = useMemo(() => {
+    const currentKey = new Date().toISOString().slice(0, 7);
+    return history
+      .filter(p => p.created_at.startsWith(currentKey))
+      .reduce((acc, curr) => acc + (curr.total_value || 0), 0);
+  }, [history]);
+
+  // Propostas Pendentes ("Na Mesa")
+  const pendingProposals = useMemo(() => {
+    return history.filter(h => h.status === 'PENDING' || !h.status);
+  }, [history]);
+
+  const totalPendingValue = pendingProposals.reduce((acc, curr) => acc + curr.total_value, 0);
+
+  const proposalsCount = history.length;
+  
+  // Progresso em relação à meta do mês (evita divisão por zero)
+  const progressToTarget = currentMonthTarget > 0 
+    ? Math.min((currentMonthRealized / currentMonthTarget) * 100, 100) 
+    : 0;
+
+  const topProducts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    history.forEach(record => {
+      if (record.items && Array.isArray(record.items)) {
+        record.items.forEach(item => {
+          counts[item.name] = (counts[item.name] || 0) + 1;
+        });
+      }
+    });
+    
+    return Object.entries(counts)
+      .map(([name, count]) => ({ name, count }))
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 3);
+  }, [history]);
+
+  const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(val);
 
   const formatTime = (event: CalendarEvent) => {
     const dateStr = event.start.dateTime || event.start.date;
     if (!dateStr) return '--:--';
     const date = new Date(dateStr);
     return date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  };
+
+  const getDayName = () => {
+    return new Date().toLocaleDateString('pt-BR', { weekday: 'long' });
+  };
+
+  const getMonthName = () => {
+    return new Date().toLocaleDateString('pt-BR', { month: 'long' });
   };
 
   return (
@@ -63,44 +174,67 @@ const SalesDashboard: React.FC = () => {
             Bom dia, <span className="text-blue-600">Vendedor.</span>
           </h1>
           <p className="text-gray-400 font-bold uppercase text-[10px] tracking-[0.3em] mt-3">
-            Status: {proposalsCount >= slaMeta.base ? '⚡ Alta Performance' : '🔥 Aquecendo Motores'}
+            Status: {progressToTarget >= 100 ? '⚡ Meta Batida' : '🔥 Em Perseguição'}
           </p>
         </div>
         <div className="flex gap-4">
            <div className="bg-white px-8 py-5 rounded-[24px] border border-gray-100 shadow-sm flex flex-col items-center">
-              <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest mb-1">Gap Super Meta</span>
-              <span className="text-2xl font-black text-gray-900">{slaMeta.super - proposalsCount} <span className="text-xs text-gray-400">deals</span></span>
+              <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest mb-1">Meta {getMonthName()}</span>
+              <span className="text-2xl font-black text-gray-900">
+                {currentMonthTarget > 0 ? formatCurrency(currentMonthTarget) : "Não definida"}
+              </span>
            </div>
         </div>
       </header>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         
+        {/* COLUNA 1: PERFORMANCE E RESUMO */}
         <div className="lg:col-span-4 space-y-8">
           <div className="app-card p-10 bg-white space-y-8 relative overflow-hidden min-h-[500px]">
              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-black text-gray-900 tracking-tight">Radar de Superação</h3>
-                <span className="text-[10px] font-black text-blue-600 bg-blue-50 px-2 py-1 rounded-md">{Math.round(progressToSuper)}%</span>
+                <h3 className="text-lg font-black text-gray-900 tracking-tight">Performance Mês</h3>
+                <span className={`text-[10px] font-black px-2 py-1 rounded-md ${progressToTarget >= 100 ? 'bg-green-100 text-green-700' : 'bg-blue-50 text-blue-600'}`}>
+                  {Math.round(progressToTarget)}% Concluído
+                </span>
              </div>
              
              <div className="relative h-4 bg-gray-50 rounded-full overflow-hidden">
-                <div className="absolute top-0 left-0 h-full bg-blue-600 transition-all duration-1000 shadow-[0_0_20px_rgba(37,99,235,0.4)]" style={{ width: `${progressToSuper}%` }}></div>
-                <div className="absolute top-0 left-1/2 w-0.5 h-full bg-white/30 z-10" title="Meta Base"></div>
+                <div className="absolute top-0 left-0 h-full bg-blue-600 transition-all duration-1000 shadow-[0_0_20px_rgba(37,99,235,0.4)]" style={{ width: `${progressToTarget}%` }}></div>
+                {/* Marcador de 100% se passar da meta */}
+                {progressToTarget > 100 && <div className="absolute top-0 right-0 h-full w-1 bg-green-500 z-10"></div>}
              </div>
 
              <div className="grid grid-cols-2 gap-4">
                 <div className="p-4 bg-gray-50 rounded-2xl">
-                   <span className="text-[8px] font-black text-gray-400 uppercase block mb-1">Propostas Hoje</span>
-                   <span className="text-xl font-black text-gray-900">{proposalsCount}</span>
+                   <span className="text-[8px] font-black text-gray-400 uppercase block mb-1">Realizado (Mês)</span>
+                   <span className="text-lg font-black text-gray-900 tracking-tight">{formatCurrency(currentMonthRealized)}</span>
                 </div>
                 <div className="p-4 bg-gray-900 text-white rounded-2xl">
-                   <span className="text-[8px] font-black text-white/40 uppercase block mb-1">SLA Atendido</span>
-                   <span className="text-xl font-black text-blue-400">{proposalsCount >= slaMeta.base ? 'SIM' : 'NÃO'}</span>
+                   <span className="text-[8px] font-black text-white/40 uppercase block mb-1">Pipeline Total</span>
+                   <span className="text-lg font-black text-blue-400">{formatCurrency(totalPipelineValue)}</span>
                 </div>
              </div>
 
-             <div className="h-48 mt-4 w-full">
-                <ResponsiveContainer width="100%" height="100%" minHeight={150}>
+             <div className="space-y-4 pt-4 border-t border-gray-50">
+                <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest block">Produtos em Alta (Top 3)</span>
+                {topProducts.length > 0 ? (
+                  topProducts.map((prod, i) => (
+                    <div key={i} className="flex justify-between items-center">
+                      <div className="flex items-center gap-2">
+                         <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[8px] font-bold text-white ${i === 0 ? 'bg-amber-400' : i === 1 ? 'bg-gray-300' : 'bg-orange-700'}`}>{i+1}</span>
+                         <span className="text-[11px] font-bold text-gray-600 truncate max-w-[150px]">{prod.name}</span>
+                      </div>
+                      <span className="text-[10px] font-black text-gray-900">{prod.count}x</span>
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-[10px] italic text-gray-400">Nenhuma proposta gerada ainda.</p>
+                )}
+             </div>
+
+             <div className="h-24 mt-4 w-full opacity-50">
+                <ResponsiveContainer width="100%" height="100%" minHeight={80}>
                   <AreaChart data={SALES_PERFORMANCE}>
                     <Area type="monotone" dataKey="leads" stroke="#2563eb" strokeWidth={3} fill="#2563eb" fillOpacity={0.05} />
                     <Tooltip hide />
@@ -109,21 +243,37 @@ const SalesDashboard: React.FC = () => {
              </div>
           </div>
 
-          <div className="app-card p-8 bg-blue-600 text-white relative group cursor-pointer overflow-hidden">
-             <div className="absolute -right-4 -bottom-4 text-7xl opacity-10 group-hover:scale-125 transition-transform duration-700">🏆</div>
-             <span className="text-[9px] font-black text-white/50 uppercase tracking-[0.3em] block mb-4">Recomendação Tática</span>
-             <p className="text-lg font-black leading-tight tracking-tight">
-                {proposalsCount < 3 
-                  ? "Seu volume de propostas está baixo. Foque na prospecção ativa de leads de alto ticket nas próximas 2 horas." 
-                  : "Excelente ritmo! Aproveite o momentum para aplicar a técnica de ancoragem em propostas paradas."}
+          <div className="app-card p-8 bg-black text-white relative group cursor-pointer overflow-hidden transition-all hover:scale-[1.02]">
+             <div className="absolute -right-6 -bottom-6 text-8xl opacity-10 group-hover:opacity-20 transition-opacity duration-700">💰</div>
+             <span className="text-[9px] font-black text-white/50 uppercase tracking-[0.3em] block mb-4">Oportunidade na Mesa</span>
+             <p className="text-3xl font-black leading-none text-white tracking-tighter mb-2">
+                {formatCurrency(totalPendingValue)}
              </p>
+             <p className="text-xs font-medium text-gray-400 leading-relaxed mb-4">
+                Existem <b>{pendingProposals.length} propostas</b> abertas aguardando sua ação. Vai deixar esfriar?
+             </p>
+             {pendingProposals.length > 0 && (
+                <div className="flex -space-x-2 overflow-hidden py-1">
+                   {pendingProposals.slice(0, 5).map((p, i) => (
+                      <div key={i} className="w-8 h-8 rounded-full bg-gray-800 border-2 border-black flex items-center justify-center text-[8px] font-bold text-white" title={p.client_name}>
+                         {p.client_name.charAt(0)}
+                      </div>
+                   ))}
+                   {pendingProposals.length > 5 && (
+                      <div className="w-8 h-8 rounded-full bg-gray-800 border-2 border-black flex items-center justify-center text-[8px] font-bold text-white">
+                         +{pendingProposals.length - 5}
+                      </div>
+                   )}
+                </div>
+             )}
           </div>
         </div>
 
+        {/* COLUNA 2: AGENDA E RITOS */}
         <div className="lg:col-span-4 space-y-8">
           <div className="app-card p-10 bg-white space-y-6">
              <div className="flex justify-between items-center">
-                <h3 className="text-lg font-black text-gray-900 tracking-tight">Google Agenda</h3>
+                <h3 className="text-lg font-black text-gray-900 tracking-tight">Agenda Hoje</h3>
                 <span className={`w-2 h-2 rounded-full bg-green-500 ${isLoadingEvents ? 'animate-ping' : 'animate-pulse'}`}></span>
              </div>
              
@@ -150,7 +300,10 @@ const SalesDashboard: React.FC = () => {
           </div>
 
           <div className="app-card p-10 bg-black text-white space-y-6 shadow-2xl shadow-black/20">
-             <h3 className="text-lg font-black tracking-tight italic">Protocolo de Ritos</h3>
+             <div className="flex justify-between items-center">
+                <h3 className="text-lg font-black tracking-tight italic">Ritos de {getDayName()}</h3>
+                <span className="text-[9px] font-black bg-white/10 px-2 py-1 rounded text-white/60 uppercase">{checkpoints.filter(c => c.done).length}/{checkpoints.length}</span>
+             </div>
              <div className="space-y-3">
                 {checkpoints.map(cp => (
                   <button 
@@ -168,6 +321,7 @@ const SalesDashboard: React.FC = () => {
           </div>
         </div>
 
+        {/* COLUNA 3: CULTURA */}
         <div className="lg:col-span-4 space-y-8">
           <div className="app-card p-10 bg-white border-l-4 border-amber-400 space-y-6">
              <span className="text-[9px] font-black text-amber-500 uppercase tracking-[0.3em]">Fundamento do SLA</span>
@@ -177,7 +331,7 @@ const SalesDashboard: React.FC = () => {
              </p>
           </div>
 
-          <div className="app-card p-10 bg-gray-50 border border-gray-100 text-center space-y-6">
+          <div className="app-card p-10 bg-gray-50 border border-gray-100 text-center space-y-6 flex flex-col justify-center h-full max-h-[300px]">
              <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest block">A Nossa Essência</span>
              <p className="text-2xl font-black text-gray-900 tracking-tighter italic leading-none">
                 "Crescimento é <br/> Movimento <br/> Estratégico."

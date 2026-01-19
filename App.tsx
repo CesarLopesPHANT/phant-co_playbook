@@ -29,6 +29,7 @@ const App: React.FC = () => {
   const [fullName, setFullName] = useState('');
   const [authError, setAuthError] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isCriticalError, setIsCriticalError] = useState(false);
 
   const retryCountRef = useRef(0);
   const profileTimeoutRef = useRef<any>(null);
@@ -61,7 +62,8 @@ const App: React.FC = () => {
       const errorDesc = (params.get('error_description') || hashParams.get('error_description') || "").toLowerCase();
       
       if (errorDesc.includes('database error') || errorDesc.includes('unexpected_failure')) {
-        setAuthError("ERRO CRÍTICO NO BANCO DE DADOS: O Supabase não conseguiu criar seu perfil. Isso ocorre quando o Trigger de cadastro está sem permissão 'SECURITY DEFINER'. Peça ao administrador para rodar o SQL de correção.");
+        setIsCriticalError(true);
+        setAuthError("ERRO CRÍTICO NO BANCO DE DADOS: O Supabase não conseguiu criar seu perfil. O Trigger de cadastro requer permissão 'SECURITY DEFINER'.");
         setLoading(false);
         setIsProcessing(false);
         // Limpa a URL para evitar reprocessamento
@@ -139,6 +141,31 @@ const App: React.FC = () => {
     };
   }, [loadUserProfile, userProfile]);
 
+  const handleCopySQL = () => {
+    const sql = `
+-- FIX SECURITY DEFINER PERMISSION
+DROP TRIGGER IF EXISTS on_auth_user_created ON auth.users;
+DROP FUNCTION IF EXISTS public.handle_new_user();
+
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public
+AS $$
+BEGIN
+  INSERT INTO public.profiles (id, full_name, avatar_url, role)
+  VALUES (new.id, COALESCE(new.raw_user_meta_data->>'full_name', new.raw_user_meta_data->>'name', 'User'), COALESCE(new.raw_user_meta_data->>'avatar_url', ''), 'USER')
+  ON CONFLICT (id) DO NOTHING;
+  RETURN new;
+END;
+$$;
+
+CREATE TRIGGER on_auth_user_created
+AFTER INSERT ON auth.users
+FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
+    `.trim();
+    navigator.clipboard.writeText(sql);
+    alert("SQL copiado! Cole e execute no 'SQL Editor' do Supabase.");
+  };
+
   if (loading && session && !userProfile) {
     return (
       <div className="h-screen w-full flex flex-col items-center justify-center bg-gray-50 p-8">
@@ -206,8 +233,20 @@ const App: React.FC = () => {
             <h1 className="text-4xl font-black text-gray-900 tracking-tighter leading-tight">{appConfig.companyName} Playbook</h1>
 
             {authError && (
-              <div className="p-8 bg-red-50 text-red-600 text-[10px] font-black rounded-[32px] border border-red-100 uppercase tracking-widest leading-relaxed text-center">
-                ⚠️ {authError}
+              <div className="p-8 bg-red-50 text-red-600 text-[10px] font-black rounded-[32px] border border-red-100 uppercase tracking-widest leading-relaxed text-center space-y-4">
+                <p>⚠️ {authError}</p>
+                {isCriticalError && (
+                   <button 
+                     onClick={handleCopySQL}
+                     className="w-full py-3 bg-red-600 text-white rounded-xl font-black text-[9px] uppercase tracking-widest shadow-lg hover:bg-red-700 transition-all flex items-center justify-center gap-2"
+                   >
+                     <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"/></svg>
+                     Copiar SQL de Correção
+                   </button>
+                )}
+                {isCriticalError && (
+                  <p className="text-[8px] text-red-400">Envie este SQL para o administrador rodar no painel do Supabase.</p>
+                )}
               </div>
             )}
 
@@ -215,7 +254,7 @@ const App: React.FC = () => {
               {authView === 'options' ? (
                 <div className="space-y-4">
                   <button 
-                    onClick={() => { setAuthError(null); AuthService.signInWithGoogle(); }}
+                    onClick={() => { setAuthError(null); setIsCriticalError(false); AuthService.signInWithGoogle(); }}
                     className="w-full py-6 bg-white border border-gray-200 text-gray-900 rounded-[30px] font-black text-xs uppercase tracking-[0.2em] shadow-sm hover:bg-gray-50 transition-all flex items-center justify-center gap-3"
                   >
                     Conectar via Google

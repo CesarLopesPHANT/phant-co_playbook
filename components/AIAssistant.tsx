@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { getSalesMentorStream } from '../services/gemini';
 import { ChatMessage, UserRole } from '../types';
@@ -28,12 +27,13 @@ const AIAssistant: React.FC<AIAssistantProps> = ({ currentRole }) => {
     const userMsg = input.trim();
     setInput('');
     
-    const updatedMessages = [...messages, { role: 'user', content: userMsg }];
+    // Fix: Explicitly type the array or cast role to literal type to satisfy ChatMessage interface
+    const updatedMessages: ChatMessage[] = [...messages, { role: 'user', content: userMsg }];
     setMessages(updatedMessages);
     setIsLoading(true);
 
     // Initial empty message for the assistant
-    setMessages(prev => [...prev, { role: 'assistant', content: '' }]);
+    setMessages(prev => [...prev, { role: 'assistant', content: '' } as ChatMessage]);
 
     const fullPrompt = `Você é um Mentor Comercial PhantLab. Ajude um usuário com cargo de ${currentRole}. 
     Usuário: ${userMsg}

@@ -12,6 +12,7 @@ import PlaybookGuide from './PlaybookGuide';
 import SLAPage from './SLAPage';
 import PrivacyPolicy from './PrivacyPolicy';
 import TermsOfService from './TermsOfService';
+import CopilotModule from './Assist/CopilotModule'; // NOVO IMPORT
 
 interface PlaybookEditorProps {
   module: PlaybookModule;
@@ -101,11 +102,14 @@ const PlaybookEditor: React.FC<PlaybookEditorProps> = ({ module, currentRole, on
     );
   }
 
+  // MÓDULOS ESPECIAIS
+  if (module.type === 'copilot') return <CopilotModule currentRole={currentRole} />; // NOVO HANDLER
   if (module.type === 'admin') return <AdminSettings />;
   if (module.type === 'dashboard') return <SalesDashboard />;
   if (module.type === 'fichario') return <Fichario currentRole={currentRole} />;
   if (module.type === 'calculator') return <ProposalSimulator onNavigateToBuilder={() => onNavigateToModule?.('pdf_builder')} />;
   
+  // PÁGINAS ESTÁTICAS
   if (module.id === 'cultura') return <NossaEssencia currentRole={currentRole} />;
   if (module.id === 'playbook_guia') return <PlaybookGuide />;
   if (module.id === 'sla_metas') return <SLAPage />;
@@ -158,10 +162,8 @@ const PlaybookEditor: React.FC<PlaybookEditorProps> = ({ module, currentRole, on
           {['Todos', 'Marca & Cultura', 'Crescimento (Growth)', 'Tecnologia', 'Cursos & Mentorias'].map(sub => (
             <button
               key={sub}
-              // Fixed: replaced setActiveTab with setActiveSubcategory
               onClick={() => setActiveSubcategory(sub)}
               className={`px-8 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${
-                // Fixed: replaced activeTab with activeSubcategory
                 activeSubcategory === sub ? 'bg-black text-white shadow-lg' : 'bg-white border border-gray-100 text-gray-400 hover:text-black hover:border-black/10'
               }`}
             >
@@ -215,13 +217,13 @@ const PlaybookEditor: React.FC<PlaybookEditorProps> = ({ module, currentRole, on
                     </button>
                     <button 
                       onClick={() => addToProposal(item)} 
-                      className={`px-6 py-4 rounded-2xl font-black text-[9px] uppercase tracking-widest transition-all shadow-xl ${
+                      className={`px-6 py-4 rounded-2xl font-black text-[9px] uppercase tracking-widest transition-all duration-300 shadow-xl ${
                         addingToProposal === item.id 
-                          ? 'bg-emerald-500 text-white shadow-emerald-500/20' 
-                          : 'bg-brand text-white shadow-brand/20 hover:scale-105 active:scale-95'
+                          ? 'bg-emerald-500 text-white shadow-emerald-500/30 scale-105' 
+                          : 'bg-black text-white shadow-black/20 hover:bg-gray-900 hover:scale-105 active:scale-95'
                       }`}
                     >
-                      {addingToProposal === item.id ? 'ADICIONADO!' : '+ ADICIONAR'}
+                      {addingToProposal === item.id ? '✓ ADICIONADO' : '+ ADICIONAR'}
                     </button>
                  </div>
               </div>

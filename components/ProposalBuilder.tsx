@@ -4,6 +4,7 @@ import { ProposalItem, StrategicMapItem, ProposalMetadata, SolutionItem, Proposa
 import { generateStrategicMapping, improveObservationText } from '../services/gemini';
 import { SupabaseService } from '../services/api';
 import ProposalPresentation from './ProposalPresentation';
+import html2pdf from 'html2pdf.js';
 
 interface ProposalBuilderProps {
   appConfig: AppCustomization;
@@ -19,10 +20,12 @@ const PhantPattern = () => (
 );
 
 const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
+  // --- STATE MANAGEMENT ---
   const [proposalItems, setProposalItems] = useState<ProposalItem[]>([]);
   const [strategicMap, setStrategicMap] = useState<StrategicMapItem[]>([]);
   const [catalog, setCatalog] = useState<SolutionItem[]>([]);
   const [proposalHistory, setProposalHistory] = useState<ProposalRecord[]>([]);
+  
   const [metadata, setMetadata] = useState<ProposalMetadata>({
     clientName: '',
     industry: '',
@@ -36,21 +39,38 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
     headline: 'PROPOSTA DE MOVIMENTO ESTRATÉGICO'
   });
   
-  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
-  const [isImprovingText, setIsImprovingText] = useState(false);
-  const [exportStatus, setExportStatus] = useState<'idle' | 'saving' | 'ready' | 'error'>('idle');
+  // UI States
+  const [isPreviewReady, setIsPreviewReady] = useState(false); // LAZY RENDERING STATE
   const [activeTab, setActiveTab] = useState<'info' | 'solutions' | 'mapping' | 'history'>('info');
-  const [zoom, setZoom] = useState(0.45);
+  const [zoom, setZoom] = useState(1.0); // Default A4 100%
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showPresentation, setShowPresentation] = useState(false);
+  
+  // Async Process States
+  const [isGeneratingAI, setIsGeneratingAI] = useState(false);
+  const [isImprovingText, setIsImprovingText] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
+
   const previewRef = useRef<HTMLDivElement>(null);
 
+  // --- INITIALIZATION ---
   useEffect(() => {
+    // 1. Data Loading
     const saved = localStorage.getItem('phant_current_proposal');
     if (saved) setProposalItems(JSON.parse(saved));
     SupabaseService.fetchSolutions().then(data => setCatalog(data || []));
     loadHistory();
+
+    // 2. LAZY RENDERING TRIGGER
+    // Wait for the parent layout (flexbox) to settle before rendering the heavy PDF DOM
+    // This prevents "width(-1)" errors in console from libraries trying to measure 0-size elements
+    const timer = setTimeout(() => {
+      setIsPreviewReady(true);
+    }, 800);
+
+    return () => clearTimeout(timer);
   }, []);
 
   const loadHistory = async () => {
@@ -62,11 +82,10 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
   const formatCurrency = (val: number) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
+  // --- AI & LOGIC HANDLERS ---
   const handleGenerateAI = async () => {
     if (!metadata.clientName) {
-      setValidationError("O nome do cliente é obrigatório para análise.");
-      setActiveTab('info');
-      setTimeout(() => setValidationError(null), 3000);
+      showError("O nome do cliente é obrigatório para análise.");
       return;
     }
     setIsGeneratingAI(true);
@@ -76,7 +95,7 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
       setActiveTab('mapping');
     } catch (err) {
       console.error(err);
-      setValidationError("A pesquisa da IA falhou.");
+      showError("A pesquisa da IA falhou.");
     } finally {
       setIsGeneratingAI(false);
     }
@@ -112,30 +131,29 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
     setProposalItems(prev => prev.filter(p => p.instanceId !== id));
   };
 
-  const handlePrint = () => {
-    // Adiciona classe de impressão ao body
-    document.body.classList.add("is-printing");
-    
-    // Pequeno delay para garantir que o CSS media print seja interpretado
-    setTimeout(() => {
-      window.print();
-      // Remove após o fechamento da caixa de diálogo de impressão
-      setTimeout(() => {
-        document.body.classList.remove("is-printing");
-      }, 500);
-    }, 100);
+  const showError = (msg: string) => {
+    setValidationError(msg);
+    setTimeout(() => setValidationError(null), 3000);
   };
 
-  const handleExport = async () => {
-    if (!metadata.clientName) {
-      setValidationError("Defina o nome do cliente antes de salvar.");
-      setActiveTab('info');
-      setTimeout(() => setValidationError(null), 3000);
-      return;
+  const updateStatus = async (id: string, newStatus: 'APPROVED' | 'REJECTED') => {
+    const res = await SupabaseService.updateProposalStatus(id, newStatus);
+    if (res.success) {
+        setProposalHistory(prev => prev.map(p => p.id === id ? { ...p, status: newStatus } : p));
+    } else {
+        showError("Erro ao atualizar status");
     }
-    if (exportStatus !== 'idle') return;
+  };
 
-    setExportStatus('saving');
+  // --- PERSISTENCE LAYER (SUPABASE) ---
+  const saveToCloud = async (silent = false) => {
+    if (!metadata.clientName) {
+      showError("Defina o nome do cliente antes de salvar.");
+      setActiveTab('info');
+      return false;
+    }
+
+    setIsSaving(true);
     try {
       const res = await SupabaseService.saveProposal(
         metadata.clientName,
@@ -146,22 +164,96 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
         metadata
       );
       
-      if (!res.success) {
-        throw new Error(res.message);
-      }
+      if (!res.success) throw new Error(res.message);
 
       await loadHistory();
-      setExportStatus('ready');
-      
-      setTimeout(() => {
-        handlePrint();
-        setExportStatus('idle');
-      }, 1000);
-
+      if (!silent) alert("Proposta salva no histórico com sucesso!");
+      return true;
     } catch (err: any) {
       console.error("Erro na exportação:", err);
-      setExportStatus('error');
-      setTimeout(() => setExportStatus('idle'), 4000);
+      showError("Erro ao salvar no banco de dados.");
+      return false;
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // --- GENERATION LAYER (HTML2PDF) ---
+  const generatePDF = async () => {
+    setIsDownloading(true);
+    
+    // 1. Identify Source
+    const sourceElement = document.getElementById('proposal-pages-container');
+    if (!sourceElement) {
+      setIsDownloading(false);
+      return;
+    }
+
+    try {
+      // 2. Clone DOM to avoid messing with current view and remove transforms
+      const clone = sourceElement.cloneNode(true) as HTMLElement;
+      
+      // 3. Create Sandbox Container (Fixed A4 dimensions, off-screen)
+      const container = document.createElement('div');
+      container.style.position = 'absolute';
+      container.style.top = '-9999px';
+      container.style.left = '0';
+      container.style.width = '210mm'; // Force Exact A4 Width
+      container.id = 'pdf-generation-sandbox';
+      
+      // 4. Reset Clone Styles (Remove Zoom/Transform)
+      clone.style.transform = 'scale(1)';
+      clone.style.transformOrigin = 'top left';
+      clone.style.margin = '0';
+      clone.style.width = '100%';
+      clone.style.height = 'auto';
+      
+      // Ensure pages inside clone have correct break properties
+      const pages = clone.querySelectorAll('.printable-page');
+      pages.forEach((page: any) => {
+        page.style.marginBottom = '0'; // Remove UI spacing
+        page.style.boxShadow = 'none'; // Remove UI shadows
+        page.style.pageBreakAfter = 'always';
+      });
+
+      container.appendChild(clone);
+      document.body.appendChild(container);
+
+      // 5. Configure html2pdf
+      const opt = {
+        margin: 0,
+        filename: `${metadata.clientName || 'Proposta'}_PhantLab.pdf`,
+        image: { type: 'jpeg', quality: 0.98 },
+        html2canvas: { 
+          scale: 2, // High resolution
+          useCORS: true, 
+          scrollY: 0,
+          windowWidth: 794, // Approx 210mm in pixels at 96dpi
+        },
+        jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+        pagebreak: { mode: ['avoid-all', 'css', 'legacy'] }
+      };
+
+      // 6. Safe Execution
+      // Handle potential import issues by checking global or imported object
+      // @ts-ignore
+      const pdfLib = html2pdf.default || html2pdf || (window as any).html2pdf;
+      
+      if (typeof pdfLib === 'function') {
+         await pdfLib().set(opt).from(clone).save();
+      } else {
+         console.error("HTML2PDF library not loaded correctly", pdfLib);
+         alert("Erro interno na biblioteca de PDF.");
+      }
+
+      // 7. Cleanup
+      document.body.removeChild(container);
+
+    } catch (err) {
+      console.error("PDF Generation Error:", err);
+      alert("Erro ao gerar PDF. Tente novamente.");
+    } finally {
+      setIsDownloading(false);
     }
   };
 
@@ -185,15 +277,22 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
     if (scrollArea) scrollArea.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const adjustZoom = (delta: number) => setZoom(prev => Math.min(Math.max(prev + delta, 0.2), 2));
+  const adjustZoom = (delta: number) => setZoom(prev => Math.min(Math.max(prev + delta, 0.2), 1.5));
+  
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
       previewRef.current?.requestFullscreen();
       setIsFullscreen(true);
     } else {
-      document.exitFullscreen();
+      if (document.exitFullscreen) document.exitFullscreen();
       setIsFullscreen(false);
     }
+  };
+
+  const getStatusBadge = (status?: string) => {
+    if (status === 'APPROVED') return <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[8px] font-black uppercase rounded">Aprovada</span>;
+    if (status === 'REJECTED') return <span className="px-2 py-0.5 bg-red-100 text-red-700 text-[8px] font-black uppercase rounded">Reprovada</span>;
+    return <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-[8px] font-black uppercase rounded">Pendente</span>;
   };
 
   return (
@@ -209,6 +308,7 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
         />
       )}
 
+      {/* --- LEFT PANEL: CONTROLS --- */}
       {!isFullscreen && (
         <div className="w-full lg:w-[450px] space-y-8 no-print shrink-0">
           <header className="space-y-2">
@@ -362,10 +462,33 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
                 <div className="space-y-4 animate-in slide-in-from-left-4 duration-300">
                   {proposalHistory.map(record => (
                     <div key={record.id} className="p-5 bg-gray-50 rounded-[24px] border border-gray-100 group hover:border-brand transition-all cursor-pointer" onClick={() => loadFromHistory(record)}>
-                       <p className="font-black text-[12px] text-gray-900 leading-none">{record.client_name}</p>
+                       <div className="flex justify-between items-start mb-2">
+                         <p className="font-black text-[12px] text-gray-900 leading-none">{record.client_name}</p>
+                         {getStatusBadge(record.status)}
+                       </div>
                        <div className="flex justify-between items-center mt-3">
                           <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">{new Date(record.created_at).toLocaleDateString('pt-BR')}</span>
                           <span className="text-[10px] font-black text-brand">{formatCurrency(record.total_value)}</span>
+                       </div>
+                       
+                       {/* APROVACAO / REPROVACAO */}
+                       <div className="flex gap-2 mt-4 pt-4 border-t border-gray-100">
+                          {record.status !== 'APPROVED' && (
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); updateStatus(record.id, 'APPROVED'); }}
+                              className="flex-1 py-2 bg-green-50 text-green-600 rounded-xl text-[9px] font-black uppercase hover:bg-green-500 hover:text-white transition-all"
+                            >
+                              ✓ Aprovar
+                            </button>
+                          )}
+                          {record.status !== 'REJECTED' && (
+                            <button 
+                              onClick={(e) => { e.stopPropagation(); updateStatus(record.id, 'REJECTED'); }}
+                              className="flex-1 py-2 bg-red-50 text-red-600 rounded-xl text-[9px] font-black uppercase hover:bg-red-500 hover:text-white transition-all"
+                            >
+                              × Reprovar
+                            </button>
+                          )}
                        </div>
                     </div>
                   ))}
@@ -392,16 +515,24 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
                   <span className="text-3xl font-black tracking-tighter">{formatCurrency(total)}</span>
               </div>
               
-              <div className="grid grid-cols-1 gap-2">
+              <div className="grid grid-cols-2 gap-2">
                 <button 
-                  onClick={handleExport} 
-                  disabled={exportStatus !== 'idle'}
-                  className="w-full py-4 bg-emerald-600 text-white rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] shadow-xl hover:scale-105 transition-all disabled:opacity-50 flex items-center justify-center gap-3"
+                  onClick={() => saveToCloud(false)} 
+                  disabled={isSaving}
+                  className="w-full py-4 bg-white/10 text-white rounded-[24px] font-black text-[10px] uppercase tracking-[0.2em] hover:bg-white/20 transition-all disabled:opacity-50"
                 >
-                  {exportStatus === 'saving' ? 'SALVANDO...' : 
-                   exportStatus === 'ready' ? 'SUCESSO! IMPRIMINDO...' : 
-                   'SALVAR E GERAR PDF'}
+                  {isSaving ? 'SALVANDO...' : 'SALVAR'}
                 </button>
+                <button 
+                  onClick={generatePDF} 
+                  disabled={isDownloading}
+                  className="w-full py-4 bg-emerald-600 text-white rounded-[24px] font-black text-[10px] uppercase tracking-[0.2em] shadow-xl hover:bg-emerald-500 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                >
+                  {isDownloading ? <span className="animate-spin">🌀</span> : 'BAIXAR PDF'}
+                </button>
+              </div>
+              
+              <div className="grid grid-cols-1 gap-2">
                 <button 
                   onClick={() => setShowPresentation(true)}
                   className="w-full py-4 bg-[#6113cc] text-white rounded-[24px] font-black text-[11px] uppercase tracking-[0.2em] shadow-xl hover:scale-105 transition-all flex items-center justify-center gap-3"
@@ -414,8 +545,9 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
         </div>
       )}
 
-      {/* ÁREA DE PREVIEW A4 - O CORAÇÃO DO PLUGIN */}
+      {/* --- RIGHT PANEL: PREVIEW --- */}
       <div 
+        ref={previewRef}
         className={`flex-1 relative flex flex-col items-center bg-[#151515] rounded-[60px] overflow-y-auto custom-scrollbar proposal-preview-area ${isFullscreen ? 'h-full w-full rounded-none' : 'p-12 max-h-[850px]'}`}
       >
         <div className="sticky top-4 z-[50] no-print bg-white/10 backdrop-blur-xl border border-white/10 rounded-full p-2 flex items-center gap-2 mb-8 shadow-2xl">
@@ -427,173 +559,188 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M12 4v16m8-8H4" strokeWidth="3" strokeLinecap="round"/></svg>
           </button>
           <div className="w-px h-6 bg-white/10 mx-1"></div>
-          <button onClick={handlePrint} className="px-6 py-2.5 bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest rounded-full shadow-lg hover:scale-105 active:scale-95 transition-all flex items-center gap-2">
-             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"/></svg>
-             IMPRIMIR / PDF
+          <button onClick={generatePDF} disabled={isDownloading} className="px-6 py-2.5 bg-emerald-500 text-white text-[10px] font-black uppercase tracking-widest rounded-full shadow-lg hover:scale-105 active:scale-95 transition-all flex items-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed">
+             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
+             </svg>
+             {isDownloading ? 'GERANDO...' : 'BAIXAR PDF'}
           </button>
-          <button onClick={toggleFullscreen} className="w-10 h-10 flex items-center justify-center text-white hover:bg-white/10 rounded-full">
-             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 3h6m0 0v6m0-6L14 10M9 3H3m0 0v6m0-6l7 7M15 21h6m0 0v-6m0 6l-7-7M9 21H3m0 0v-6m0 6l7-7" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+          <button onClick={toggleFullscreen} className={`h-10 px-4 flex items-center justify-center text-white ${isFullscreen ? 'bg-red-500 hover:bg-red-600 rounded-full font-black text-[10px] uppercase tracking-widest' : 'hover:bg-white/10 rounded-full'}`}>
+             {isFullscreen ? (
+                'Fechar'
+             ) : (
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 3h6m0 0v6m0-6L14 10M9 3H3m0 0v6m0-6l7 7M15 21h6m0 0v-6m0 6l-7-7M9 21H3m0 0v-6m0 6l7-7" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+             )}
           </button>
         </div>
 
-        <div 
-          id="proposal-pages-container"
-          className="transition-transform duration-300 flex flex-col items-center origin-top print:transform-none proposal-container"
-          style={{ transform: `scale(${zoom})` }}
-        >
-          {/* PÁGINA 1: CAPA */}
-          <section className="printable-page w-[210mm] min-h-[297mm] bg-black text-white p-24 flex flex-col justify-between relative shadow-2xl shrink-0 mb-12 print:mb-0 print:shadow-none animate-in zoom-in-95 duration-500 print-break-after">
-            <PhantPattern />
-            <div className="relative z-10 flex justify-between items-start">
-              <div className="w-48 h-auto overflow-hidden flex items-center justify-start text-black font-black">
-                 {appConfig.proposalLogoUrl ? (
-                   <img src={appConfig.proposalLogoUrl} alt="Logo" className="w-full h-auto object-contain" />
-                 ) : (
-                   <span className="text-white text-4xl">{appConfig.companyName.charAt(0) || 'P'}</span>
-                 )}
-              </div>
-              <div className="text-right">
-                  <p className="text-[10px] font-black uppercase tracking-[0.4em] text-brand">Estrategista Comercial</p>
-                  <p className="font-bold text-sm mt-1">{metadata.consultant}</p>
-              </div>
-            </div>
-
-            <div className="relative z-10 space-y-12">
-              <h1 className="text-8xl font-black tracking-tighter leading-[0.85] uppercase">
-                  {metadata.headline?.split(' ').map((word, i) => (
-                    <span key={i} className="block">{word}</span>
-                  ))}
-              </h1>
-              <div className="w-32 h-2 bg-brand"></div>
-            </div>
-
-            <div className="relative z-10 flex justify-between items-end border-t border-white/20 pt-12">
-              <div className="space-y-2">
-                  <p className="text-[11px] font-black uppercase tracking-[0.5em] text-white/40">Exclusivo para</p>
-                  <p className="text-5xl font-black tracking-tighter">{metadata.clientName || 'CLIENTE'}</p>
-              </div>
-              <div className="text-right">
-                  <p className="text-[11px] font-black uppercase tracking-widest text-white/40">Emissão</p>
-                  <p className="font-bold text-lg">{metadata.date}</p>
-              </div>
-            </div>
-          </section>
-
-          {/* PÁGINA 2: MAPA ESTRATÉGICO */}
-          <section className="printable-page w-[210mm] min-h-[297mm] bg-[#F9F9F9] text-black p-24 flex flex-col justify-between shadow-2xl shrink-0 mb-12 print:mb-0 print:shadow-none print-break-after">
-            <div className="flex justify-between items-center border-b-4 border-black pb-10">
-                <h2 className="text-4xl font-black tracking-tighter uppercase leading-none">Mapa de<br/>Movimento.</h2>
-                <span className="text-[10px] font-black uppercase tracking-widest bg-black text-white px-4 py-1">PHANT AI INSIGHT</span>
-            </div>
-
-            <div className="flex-1 py-16 flex flex-col justify-center space-y-1">
-                <div className="grid grid-cols-2 gap-px bg-black/10 border border-black/10">
-                  <div className="bg-black text-white/40 p-6 text-[10px] font-black uppercase tracking-widest text-center">Estado Atual (Dissonância)</div>
-                  <div className="bg-brand text-white p-6 text-[10px] font-black uppercase tracking-widest text-center">Estado Desejado (Clareza {appConfig.companyName})</div>
-                </div>
-
-                {strategicMap.length > 0 ? strategicMap.map((map, i) => (
-                  <div key={i} className="grid grid-cols-2 gap-px bg-black/5">
-                    <div className="bg-white p-12 border-r border-black/5 flex flex-col justify-center min-h-[160px]">
-                        <span className="text-red-500 font-black text-[30px] mb-4 opacity-20">0{i+1}</span>
-                        <p className="text-sm font-medium text-black/50 leading-relaxed italic">"{map.current}"</p>
-                    </div>
-                    <div className="bg-white p-12 flex flex-col justify-center relative">
-                        <div className="absolute left-[-10px] top-1/2 -translate-y-1/2 w-5 h-5 bg-brand rotate-45 flex items-center justify-center">
-                          <svg className="w-3 h-3 text-white -rotate-45" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" strokeWidth="4"/></svg>
-                        </div>
-                        <p className="text-base font-black text-black leading-tight tracking-tight">{map.desired}</p>
-                    </div>
+        {/* --- DOCUMENT RENDERER (LAZY LOADED TO PREVENT WIDTH ERROR) --- */}
+        {isPreviewReady ? (
+            <div 
+              id="proposal-pages-container"
+              className="transition-transform duration-300 flex flex-col items-center origin-top print:transform-none proposal-container"
+              // Force dimensions to avoid "width(-1)" console error on measuring tools
+              style={{ transform: `scale(${zoom})`, minWidth: '210mm', minHeight: '297mm' }}
+            >
+              {/* PÁGINA 1: CAPA */}
+              <section className="printable-page w-[210mm] min-h-[297mm] bg-black text-white p-24 flex flex-col justify-between relative shadow-2xl shrink-0 mb-12 print:mb-0 print:shadow-none animate-in zoom-in-95 duration-500 print-break-after">
+                <PhantPattern />
+                <div className="relative z-10 flex justify-between items-start">
+                  <div className="w-48 h-auto overflow-hidden flex items-center justify-start text-black font-black">
+                     {appConfig.proposalLogoUrl ? (
+                       <img src={appConfig.proposalLogoUrl} alt="Logo" className="w-full h-auto object-contain" />
+                     ) : (
+                       <span className="text-white text-4xl">{appConfig.companyName.charAt(0) || 'P'}</span>
+                     )}
                   </div>
-                )) : (
-                  <div className="py-40 text-center opacity-10 font-black uppercase tracking-[0.3em]">Gerando Contexto Estratégico...</div>
-                )}
-            </div>
-
-            <div className="p-12 bg-black text-white flex justify-between items-center rounded-2xl">
-                <div>
-                  <p className="text-[10px] font-black uppercase tracking-widest opacity-50 mb-2">Análise proprietária baseada em IA</p>
-                  <div className="flex gap-4">
-                      <span className="text-[9px] font-bold uppercase text-brand">Website • Instagram • Ads</span>
+                  <div className="text-right">
+                      <p className="text-[10px] font-black uppercase tracking-[0.4em] text-brand">Estrategista Comercial</p>
+                      <p className="font-bold text-sm mt-1">{metadata.consultant}</p>
                   </div>
                 </div>
-                <div className="w-32 h-auto overflow-hidden flex items-center justify-center">
-                   {appConfig.proposalLogoUrl ? (
-                     <img src={appConfig.proposalLogoUrl} alt="Logo" className="w-full h-auto object-contain" />
-                   ) : (
-                     <span className="text-white font-black text-2xl">{appConfig.companyName.charAt(0) || 'P'}</span>
-                   )}
-                </div>
-            </div>
-          </section>
 
-          {/* PÁGINA 3: ESCOPO TÁTICO */}
-          <section className="printable-page w-[210mm] min-h-[297mm] bg-white text-black p-24 flex flex-col shadow-2xl shrink-0 mb-12 print:mb-0 print:shadow-none print-break-after">
-            <div className="flex justify-between items-start mb-16">
-                <div className="space-y-4">
-                  <h2 className="text-6xl font-black tracking-tighter uppercase leading-none">Escopo<br/>Tático.</h2>
-                  <div className="w-20 h-3 bg-black"></div>
+                <div className="relative z-10 space-y-12">
+                  <h1 className="text-8xl font-black tracking-tighter leading-[0.85] uppercase">
+                      {metadata.headline?.split(' ').map((word, i) => (
+                        <span key={i} className="block">{word}</span>
+                      ))}
+                  </h1>
+                  <div className="w-32 h-2 bg-brand"></div>
                 </div>
-                <div className="text-right">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-black/30">Investimento Total</p>
-                  <p className="text-4xl font-black tracking-tighter text-brand">{formatCurrency(total)}</p>
-                </div>
-            </div>
 
-            <div className="flex-1 space-y-12">
-                {proposalItems.map((item, i) => (
-                  <div key={i} className="space-y-6">
-                    <div className="flex items-center gap-6">
-                        <div className="w-10 h-10 bg-black text-white flex items-center justify-center font-black text-lg">0{i+1}</div>
-                        <div className="flex-1 border-b-2 border-black pb-2 flex justify-between items-end">
-                          <h3 className="text-2xl font-black tracking-tight uppercase">{item.name}</h3>
-                          <span className="text-[10px] font-black uppercase tracking-widest bg-gray-100 px-3 py-1 rounded-md">{item.duration}</span>
-                        </div>
-                    </div>
-                    
-                    <div className="grid grid-cols-2 gap-12 pl-16">
-                        <div className="space-y-4">
-                          <h4 className="text-[10px] font-black uppercase tracking-widest text-brand">Direcionamento</h4>
-                          <p className="text-xs font-medium text-gray-500 leading-relaxed">
-                              {item.description || "Implementação estratégica visando a previsibilidade de escala e monetização agressiva."}
-                          </p>
-                        </div>
-                        <div className="space-y-4">
-                          <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-300">Entregáveis</h4>
-                          <ul className="space-y-2">
-                              {(item.deliverables || ['Implementação Técnica', 'Relatório de Performance']).map((d, idx) => (
-                                <li key={idx} className="flex items-center gap-3 text-xs font-bold">
-                                  <span className="w-1.5 h-1.5 bg-brand rounded-full"></span>
-                                  {d}
-                                </li>
-                              ))}
-                          </ul>
-                        </div>
-                    </div>
+                <div className="relative z-10 flex justify-between items-end border-t border-white/20 pt-12">
+                  <div className="space-y-2">
+                      <p className="text-[11px] font-black uppercase tracking-[0.5em] text-white/40">Exclusivo para</p>
+                      <p className="text-5xl font-black tracking-tighter">{metadata.clientName || 'CLIENTE'}</p>
                   </div>
-                ))}
-
-                {metadata.observations && (
-                  <div className="pl-16 pt-8 space-y-4">
-                    <h4 className="text-[10px] font-black uppercase tracking-widest text-black/20">Termos e Acordos</h4>
-                    <p className="text-sm font-bold text-gray-900 leading-relaxed border-l-4 border-brand pl-6 italic bg-gray-50 p-6 rounded-r-2xl">
-                      {metadata.observations}
-                    </p>
+                  <div className="text-right">
+                      <p className="text-[11px] font-black uppercase tracking-widest text-white/40">Emissão</p>
+                      <p className="font-bold text-lg">{metadata.date}</p>
                   </div>
-                )}
-            </div>
-
-            <footer className="pt-10 border-t border-black/5 text-[10px] font-black text-black/20 uppercase tracking-widest flex justify-between items-center">
-                <span>© {appConfig.companyName} Strategic Engine</span>
-                <div className="flex items-center gap-4">
-                  <span className="opacity-40">{metadata.clientName} Exclusive Access</span>
-                  {appConfig.proposalLogoUrl && (
-                    <img src={appConfig.proposalLogoUrl} alt="Logo" className="h-4 w-auto grayscale opacity-30" />
-                  )}
                 </div>
-            </footer>
-          </section>
-        </div>
+              </section>
+
+              {/* PÁGINA 2: MAPA ESTRATÉGICO */}
+              <section className="printable-page w-[210mm] min-h-[297mm] bg-[#F9F9F9] text-black p-24 flex flex-col justify-between shadow-2xl shrink-0 mb-12 print:mb-0 print:shadow-none print-break-after">
+                <div className="flex justify-between items-center border-b-4 border-black pb-10">
+                    <h2 className="text-4xl font-black tracking-tighter uppercase leading-none">Mapa de<br/>Movimento.</h2>
+                    <span className="text-[10px] font-black uppercase tracking-widest bg-black text-white px-4 py-1">PHANT AI INSIGHT</span>
+                </div>
+
+                <div className="flex-1 py-16 flex flex-col justify-center space-y-1">
+                    <div className="grid grid-cols-2 gap-px bg-black/10 border border-black/10">
+                      <div className="bg-black text-white/40 p-6 text-[10px] font-black uppercase tracking-widest text-center">Estado Atual (Dissonância)</div>
+                      <div className="bg-brand text-white p-6 text-[10px] font-black uppercase tracking-widest text-center">Estado Desejado (Clareza {appConfig.companyName})</div>
+                    </div>
+
+                    {strategicMap.length > 0 ? strategicMap.map((map, i) => (
+                      <div key={i} className="grid grid-cols-2 gap-px bg-black/5">
+                        <div className="bg-white p-12 border-r border-black/5 flex flex-col justify-center min-h-[160px]">
+                            <span className="text-red-500 font-black text-[30px] mb-4 opacity-20">0{i+1}</span>
+                            <p className="text-sm font-medium text-black/50 leading-relaxed italic">"{map.current}"</p>
+                        </div>
+                        <div className="bg-white p-12 flex flex-col justify-center relative">
+                            <div className="absolute left-[-10px] top-1/2 -translate-y-1/2 w-5 h-5 bg-brand rotate-45 flex items-center justify-center">
+                              <svg className="w-3 h-3 text-white -rotate-45" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" strokeWidth="4"/></svg>
+                            </div>
+                            <p className="text-base font-black text-black leading-tight tracking-tight">{map.desired}</p>
+                        </div>
+                      </div>
+                    )) : (
+                      <div className="py-40 text-center opacity-10 font-black uppercase tracking-[0.3em]">Gerando Contexto Estratégico...</div>
+                    )}
+                </div>
+
+                <div className="p-12 bg-black text-white flex justify-between items-center rounded-2xl">
+                    <div>
+                      <p className="text-[10px] font-black uppercase tracking-widest opacity-50 mb-2">Análise proprietária baseada em IA</p>
+                      <div className="flex gap-4">
+                          <span className="text-[9px] font-bold uppercase text-brand">Website • Instagram • Ads</span>
+                      </div>
+                    </div>
+                    <div className="w-32 h-auto overflow-hidden flex items-center justify-center">
+                       {appConfig.proposalLogoUrl ? (
+                         <img src={appConfig.proposalLogoUrl} alt="Logo" className="w-full h-auto object-contain" />
+                       ) : (
+                         <span className="text-white font-black text-2xl">{appConfig.companyName.charAt(0) || 'P'}</span>
+                       )}
+                    </div>
+                </div>
+              </section>
+
+              {/* PÁGINA 3: ESCOPO TÁTICO */}
+              <section className="printable-page w-[210mm] min-h-[297mm] bg-white text-black p-24 flex flex-col shadow-2xl shrink-0 mb-12 print:mb-0 print:shadow-none print-break-after">
+                <div className="flex justify-between items-start mb-16">
+                    <div className="space-y-4">
+                      <h2 className="text-6xl font-black tracking-tighter uppercase leading-none">Escopo<br/>Tático.</h2>
+                      <div className="w-20 h-3 bg-black"></div>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[10px] font-black uppercase tracking-widest text-black/30">Investimento Total</p>
+                      <p className="text-4xl font-black tracking-tighter text-brand">{formatCurrency(total)}</p>
+                    </div>
+                </div>
+
+                <div className="flex-1 space-y-12">
+                    {proposalItems.map((item, i) => (
+                      <div key={i} className="space-y-6">
+                        <div className="flex items-center gap-6">
+                            <div className="w-10 h-10 bg-black text-white flex items-center justify-center font-black text-lg">0{i+1}</div>
+                            <div className="flex-1 border-b-2 border-black pb-2 flex justify-between items-end">
+                              <h3 className="text-2xl font-black tracking-tight uppercase">{item.name}</h3>
+                              <span className="text-[10px] font-black uppercase tracking-widest bg-gray-100 px-3 py-1 rounded-md">{item.duration}</span>
+                            </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-12 pl-16">
+                            <div className="space-y-4">
+                              <h4 className="text-[10px] font-black uppercase tracking-widest text-brand">Direcionamento</h4>
+                              <p className="text-xs font-medium text-gray-500 leading-relaxed">
+                                  {item.description || "Implementação estratégica visando a previsibilidade de escala e monetização agressiva."}
+                              </p>
+                            </div>
+                            <div className="space-y-4">
+                              <h4 className="text-[10px] font-black uppercase tracking-widest text-gray-300">Entregáveis</h4>
+                              <ul className="space-y-2">
+                                  {(item.deliverables || ['Implementação Técnica', 'Relatório de Performance']).map((d, idx) => (
+                                    <li key={idx} className="flex items-center gap-3 text-xs font-bold">
+                                      <span className="w-1.5 h-1.5 bg-brand rounded-full"></span>
+                                      {d}
+                                    </li>
+                                  ))}
+                              </ul>
+                            </div>
+                        </div>
+                      </div>
+                    ))}
+
+                    {metadata.observations && (
+                      <div className="pl-16 pt-8 space-y-4">
+                        <h4 className="text-[10px] font-black uppercase tracking-widest text-black/20">Termos e Acordos</h4>
+                        <p className="text-sm font-bold text-gray-900 leading-relaxed border-l-4 border-brand pl-6 italic bg-gray-50 p-6 rounded-r-2xl">
+                          {metadata.observations}
+                        </p>
+                      </div>
+                    )}
+                </div>
+
+                <footer className="pt-10 border-t border-black/5 text-[10px] font-black text-black/20 uppercase tracking-widest flex justify-between items-center">
+                    <span>© {appConfig.companyName} Strategic Engine</span>
+                    <div className="flex items-center gap-4">
+                      <span className="opacity-40">{metadata.clientName} Exclusive Access</span>
+                      {appConfig.proposalLogoUrl && (
+                        <img src={appConfig.proposalLogoUrl} alt="Logo" className="h-4 w-auto grayscale opacity-30" />
+                      )}
+                    </div>
+                </footer>
+              </section>
+            </div>
+        ) : (
+            <div className="flex items-center justify-center h-full flex-col gap-4 animate-in fade-in duration-1000">
+               <div className="w-12 h-12 border-4 border-white/20 border-t-brand rounded-full animate-spin"></div>
+               <span className="text-white/30 text-xs font-black uppercase tracking-widest">Preparando Visualização...</span>
+            </div>
+        )}
       </div>
     </div>
   );

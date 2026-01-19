@@ -1,9 +1,22 @@
 
 import { createClient } from '@supabase/supabase-js';
-import { SolutionItem, AIConfig, UserRole, ProposalRecord, ProposalItem, ProposalMetadata, AppCustomization } from '../types';
+import { SolutionItem, AIConfig, UserRole, ProposalRecord, ProposalItem, ProposalMetadata, AppCustomization, MonthlyGoal, AssistSession, FicharioFolder } from '../types';
 
 const SUPABASE_URL = 'https://wdatcopytwgykhpqshxa.supabase.co';
-const SUPABASE_ANON_KEY = (process.env as any).NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY || 'sb_publishable_22AXd9MJL5S10dZR7lMLvw_fAHFPHxZ';
+
+// Safely access process.env
+const getEnvVar = (key: string) => {
+  try {
+    if (typeof process !== 'undefined' && process.env) {
+      return process.env[key];
+    }
+  } catch (e) {
+    // ignore error
+  }
+  return undefined;
+};
+
+const SUPABASE_ANON_KEY = getEnvVar('NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY') || 'sb_publishable_22AXd9MJL5S10dZR7lMLvw_fAHFPHxZ';
 
 export const DEFAULT_DRIVE_FOLDER_ID = "1-01ahpyVthGXZJNUH5rZCjFKxqCm8sOI";
 const PROXY_URL = "https://script.google.com/macros/s/AKfycbzHHKsB6EKatnMLQ-V28XZ66CjQCbQQCa3fjfC4EjEKdGgc5K80oDA3aR0jSZR5Mz5UUg/exec";
@@ -32,7 +45,8 @@ export const AuthService = {
       provider: 'google',
       options: {
         redirectTo,
-        scopes: 'openid email profile https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/drive.metadata.readonly',
+        // UPDATED SCOPE: 'drive.readonly' permite ler pastas compartilhadas que não foram criadas pelo App.
+        scopes: 'openid email profile https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/drive.readonly',
         queryParams: { access_type: 'offline', prompt: 'consent' },
       }
     });
@@ -102,6 +116,7 @@ export const GoogleApiService = {
 };
 
 export const SupabaseService = {
+  // ... (Solutions, Configs, etc - mantidos iguais)
   async fetchSolutions(): Promise<SolutionItem[]> {
     try {
       const { data, error } = await supabase.from('solutions').select('*').order('id', { ascending: true });
@@ -117,7 +132,19 @@ export const SupabaseService = {
   },
   async syncSolutions(solutions: SolutionItem[]) {
     try {
-      const payload = solutions.map(s => ({ id: String(s.id), solucao: s.solucao, promessa: s.promessa, descricao: s.descricao, categoria: s.categoria, subcategoria: s.subcategoria, duracao: s.duracao, maturidade: s.maturidade, valor_base_num: s.valor_base_num, variaveis_opcionais: s.variaveis_opcionais }));
+      const payload = solutions.map(s => ({ 
+        id: String(s.id), 
+        solucao: s.solucao, 
+        promessa: s.promessa, 
+        descricao: s.descricao, 
+        categoria: s.categoria, 
+        subcategoria: s.subcategoria, 
+        duracao: s.duracao, 
+        maturidade: s.maturidade, 
+        valor_base_num: s.valor_base_num, 
+        variaveis_opcionais: s.variaveis_opcionais,
+        is_favorite: s.is_favorite 
+      }));
       const { error } = await supabase.from('solutions').upsert(payload, { onConflict: 'id' });
       if (error) throw error;
       return { success: true };
@@ -193,6 +220,39 @@ export const SupabaseService = {
       return { success: false, message: String(err) }; 
     }
   },
+  async fetchGoals(): Promise<MonthlyGoal[]> {
+    try {
+      const { data, error } = await supabase.from('app_config').select('content').eq('id', 'sales_goals').single();
+      if (error || !data) return [];
+      return Array.isArray(data.content) ? data.content : [];
+    } catch { return []; }
+  },
+  async syncGoals(goals: MonthlyGoal[]) {
+    try {
+      const { error } = await supabase
+        .from('app_config')
+        .upsert({ id: 'sales_goals', content: goals }, { onConflict: 'id' });
+      return { success: !error, message: error?.message };
+    } catch (err: any) {
+      return { success: false, message: err.message };
+    }
+  },
+  // --- FICHARIO INTELIGENTE ---
+  
+  async fetchFicharioFolders(): Promise<FicharioFolder[]> {
+    try {
+      const { data } = await supabase.from('fichario_folders').select('*').order('name');
+      return data || [];
+    } catch { return []; }
+  },
+
+  async updateFicharioFolder(id: string, name: string) {
+    try {
+      const { error } = await supabase.from('fichario_folders').update({ name }).eq('id', id);
+      return { success: !error };
+    } catch { return { success: false }; }
+  },
+
   async fetchFicharioFromDb() {
     try {
       const { data, error } = await supabase.from('fichario').select('*').order('nome', { ascending: true });
@@ -200,13 +260,46 @@ export const SupabaseService = {
       return data || [];
     } catch { return []; }
   },
+
   async syncFicharioToDb(files: any[]) {
     if (files.length === 0) return;
     try {
-      const payload = files.map(file => ({ drive_file_id: file.id, nome: file.name, formato: file.type, link: file.url, data_atualizacao: file.rawUpdatedAt || null, folder_id: file.folderId || DEFAULT_DRIVE_FOLDER_ID, job_id: JOB_ID, raw: file.raw || {} }));
+      // 1. Carregar pastas para mapeamento
+      const folders = await this.fetchFicharioFolders();
+      
+      // 2. Preparar payload com categorização automática
+      const payload = files.map(file => {
+        let categoryId = 'others';
+        const type = file.type || 'unknown';
+        const nameLower = file.name.toLowerCase();
+
+        // Regra especial para Scripts (baseado no nome)
+        if (nameLower.includes('script') || nameLower.includes('roteiro') || nameLower.includes('copiloto')) {
+            categoryId = 'scripts';
+        } else {
+            // Regra baseada nos tipos definidos na tabela fichario_folders
+            const match = folders.find(f => f.file_types?.includes(type));
+            if (match) categoryId = match.id;
+        }
+
+        return { 
+            drive_file_id: file.id, 
+            nome: file.name, 
+            formato: file.type, 
+            link: file.url, 
+            data_atualizacao: file.rawUpdatedAt || null, 
+            folder_id: file.folderId || DEFAULT_DRIVE_FOLDER_ID, 
+            virtual_folder_id: categoryId,
+            job_id: JOB_ID, 
+            raw: file.raw || {} 
+        };
+      });
+
       await supabase.from('fichario').upsert(payload, { onConflict: 'drive_file_id' });
     } catch (err: any) { console.error('Erro na sincronia do fichário:', err.message); }
   },
+
+  // ... (Proposals, etc - mantidos iguais)
   async saveProposal(clientName: string, industry: string, totalValue: number, consultant: string, items: ProposalItem[], metadata: ProposalMetadata) {
     try {
       const { error } = await supabase.from('proposals_history').insert([{
@@ -215,12 +308,22 @@ export const SupabaseService = {
         total_value: totalValue,
         consultant,
         items,
-        metadata
+        metadata,
+        status: 'PENDING'
       }]);
       if (error) throw error;
       return { success: true };
     } catch (err: any) { 
       return { success: false, message: err.message }; 
+    }
+  },
+  async updateProposalStatus(id: string, status: 'APPROVED' | 'REJECTED') {
+    try {
+      const { error } = await supabase.from('proposals_history').update({ status }).eq('id', id);
+      if (error) throw error;
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, message: err.message };
     }
   },
   async fetchProposalsHistory(): Promise<ProposalRecord[]> {
@@ -229,6 +332,69 @@ export const SupabaseService = {
       if (error) throw error;
       return data || [];
     } catch (err) { return []; }
+  },
+  
+  // --- COPILOT SERVICES ---
+  
+  async createAssistSession(clientName: string, scriptId: string, version: string): Promise<AssistSession | null> {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) throw new Error("Usuário não logado no sistema.");
+      
+      const { data, error } = await supabase.from('assist_sessions').insert([{
+        user_id: user.id,
+        client_name: clientName,
+        script_id: scriptId,
+        script_version: version,
+        status: 'active'
+      }]).select().single();
+      
+      if (error) {
+        console.error("Erro ao criar sessão no Supabase:", error);
+        throw new Error(`Erro DB: ${error.message} (${error.code})`);
+      }
+      return data;
+    } catch (err: any) { 
+      console.error("createAssistSession falhou:", err);
+      // Re-throw para o CopilotService tratar e exibir o alert correto
+      throw new Error(err.message || "Erro desconhecido ao criar sessão"); 
+    }
+  },
+  
+  async endAssistSession(sessionId: string) {
+    await supabase.from('assist_sessions').update({ 
+      status: 'completed',
+      ended_at: new Date().toISOString()
+    }).eq('id', sessionId);
+  },
+
+  async saveTranscript(sessionId: string, text: string, speaker: string) {
+    await supabase.from('assist_transcripts').insert({
+      session_id: sessionId,
+      text,
+      speaker,
+      ts_ms: Date.now(),
+      is_final: true
+    });
+  },
+
+  async saveAssistScore(sessionId: string, scoreData: any) {
+    await supabase.from('assist_scores').insert({
+      session_id: sessionId,
+      score_final: scoreData.score_final,
+      close_probability: scoreData.close_probability,
+      summary: scoreData.summary,
+      highlights: scoreData.highlights,
+      next_steps: scoreData.next_steps
+    });
+  },
+
+  async fetchAssistSessions(): Promise<AssistSession[]> {
+    try {
+      const { data, error } = await supabase.from('assist_sessions').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    } catch { return []; }
   }
 };
 
@@ -243,22 +409,75 @@ export const StorageService = {
   },
   async fetchDriveFiles(inputLink: string) {
     const folderId = this.extractFolderId(inputLink);
-    const finalUrl = `${PROXY_URL}?id=${folderId}&_t=${Date.now()}`;
+    let files: any[] = [];
+    let success = false;
+    
+    // 1. Tentar via API Oficial (Recomendado)
     try {
-      const response = await fetch(finalUrl);
-      if (!response.ok) throw new Error(`HTTP_ERROR_${response.status}`);
-      const data = await response.json();
-      return this.processFiles(data.files || data.items || [], folderId);
-    } catch (err: any) { 
-      console.error("Erro fetchDriveFiles:", err);
-      throw new Error(err.message || "BLOCK_BY_BROWSER"); 
+      const token = await GoogleApiService.getAccessToken();
+      if (token) {
+        const query = encodeURIComponent(`'${folderId}' in parents and trashed = false`);
+        // Includes iconLink and sorts by folders first
+        const fields = encodeURIComponent("files(id, name, mimeType, size, modifiedTime, thumbnailLink, webViewLink, iconLink)");
+        const url = `https://www.googleapis.com/drive/v3/files?q=${query}&fields=${fields}&pageSize=200&orderBy=folder,name`;
+        
+        const res = await fetch(url, {
+          headers: { Authorization: `Bearer ${token}` }
+        });
+        
+        if (res.ok) {
+          const data = await res.json();
+          files = data.files || [];
+          success = true;
+        } else {
+          console.warn(`Drive API Error ${res.status}:`, res.statusText);
+        }
+      }
+    } catch (e) {
+      console.warn("Google API Direct Fetch failed, trying fallback...", e);
     }
+
+    // 2. Fallback para Proxy Script (Apenas se API falhar)
+    if (!success) {
+      const finalUrl = `${PROXY_URL}?id=${folderId}&_t=${Date.now()}`;
+      try {
+        const response = await fetch(finalUrl, { method: 'GET', mode: 'cors' });
+        if (!response.ok) throw new Error(`HTTP_ERROR_${response.status}`);
+        const data = await response.json();
+        files = data.files || data.items || [];
+        success = true;
+      } catch (err: any) { 
+        console.warn("Proxy Drive indisponível ou bloqueado.", err.message);
+      }
+    }
+
+    if (!success) {
+       throw new Error("Não foi possível carregar os arquivos. Verifique a conexão ou faça login novamente.");
+    }
+
+    return this.processFiles(files, folderId);
   },
   processFiles(files: any[], folderId: string) {
     return files.map((file: any) => {
       const fileId = file.id || file.fileId;
       const modTime = file.modifiedTime || null;
-      return { id: fileId, name: file.name || file.title || "Arquivo sem nome", type: this.mapMimeToType(file.mimeType || ""), size: file.size ? this.formatBytes(parseInt(file.size)) : '---', updatedAt: modTime ? new Date(modTime).toLocaleDateString('pt-BR') : '---', rawUpdatedAt: modTime, url: `https://drive.google.com/file/d/${fileId}/view`, previewUrl: `https://drive.google.com/file/d/${fileId}/preview`, downloadUrl: `https://drive.google.com/uc?export=download&id=${fileId}`, thumbnail: `https://drive.google.com/thumbnail?id=${fileId}&sz=w400`, folderId: folderId, raw: file };
+      // Prefer API provided thumbnail if available
+      const thumb = file.thumbnailLink || `https://drive.google.com/thumbnail?id=${fileId}&sz=w400`;
+      
+      return { 
+        id: fileId, 
+        name: file.name || file.title || "Arquivo sem nome", 
+        type: this.mapMimeToType(file.mimeType || ""), 
+        size: file.size ? this.formatBytes(parseInt(file.size)) : '---', 
+        updatedAt: modTime ? new Date(modTime).toLocaleDateString('pt-BR') : '---', 
+        rawUpdatedAt: modTime, 
+        url: file.webViewLink || `https://drive.google.com/file/d/${fileId}/view`, 
+        previewUrl: `https://drive.google.com/file/d/${fileId}/preview`, 
+        downloadUrl: `https://drive.google.com/uc?export=download&id=${fileId}`, 
+        thumbnail: thumb, 
+        folderId: folderId, 
+        raw: file 
+      };
     });
   },
   extractFolderId(url: string) {
