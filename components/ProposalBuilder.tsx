@@ -18,6 +18,15 @@ const PhantPattern = () => (
   </svg>
 );
 
+const ToggleSwitch = ({ label, checked, onChange }: { label: string, checked: boolean, onChange: (v: boolean) => void }) => (
+  <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-200 cursor-pointer hover:border-gray-400 transition-colors" onClick={() => onChange(!checked)}>
+    <label className="text-[10px] font-black text-gray-900 uppercase tracking-widest cursor-pointer select-none">{label}</label>
+    <div className={`w-10 h-5 rounded-full relative transition-colors ${checked ? 'bg-[#6113cc]' : 'bg-gray-300'}`}>
+        <div className={`absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-transform ${checked ? 'translate-x-5' : 'translate-x-0'}`}></div>
+    </div>
+  </div>
+);
+
 const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
   // --- STATE MANAGEMENT ---
   const [proposalItems, setProposalItems] = useState<ProposalItem[]>([]);
@@ -41,12 +50,18 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
   });
   
   // UI States
-  const [isPreviewReady, setIsPreviewReady] = useState(false); // LAZY RENDERING STATE
+  const [isPreviewReady, setIsPreviewReady] = useState(false);
   const [activeTab, setActiveTab] = useState<'info' | 'solutions' | 'mapping' | 'history'>('info');
-  const [zoom, setZoom] = useState(1.0); // Default A4 100%
+  const [zoom, setZoom] = useState(0.8);
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showPresentation, setShowPresentation] = useState(false);
-  const [showAIAnalysis, setShowAIAnalysis] = useState(true); // Toggle para mostrar/ocultar mapa IA
+  
+  // PAGE VISIBILITY TOGGLES
+  const [showCover, setShowCover] = useState(true);
+  const [showAIAnalysis, setShowAIAnalysis] = useState(true);
+  const [showScope, setShowScope] = useState(true);
+  const [showObservations, setShowObservations] = useState(true);
+  const [showClosing, setShowClosing] = useState(true);
   
   // Async Process States
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
@@ -55,7 +70,8 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
   const [isDownloading, setIsDownloading] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
-  const previewRef = useRef<HTMLDivElement>(null);
+  const previewContentRef = useRef<HTMLDivElement>(null);
+  const previewContainerRef = useRef<HTMLDivElement>(null);
 
   // --- INITIALIZATION ---
   useEffect(() => {
@@ -65,14 +81,43 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
     SupabaseService.fetchSolutions().then(data => setCatalog(data || []));
     loadHistory();
 
-    // 2. LAZY RENDERING TRIGGER
-    // Wait for the parent layout (flexbox) to settle before rendering the heavy PDF DOM
+    // 2. Load User Profile
+    const token = localStorage.getItem('sb-wdatcopytwgykhpqshxa-auth-token');
+    if (token) {
+        try {
+            const user = JSON.parse(token).user;
+            if (user && !metadata.consultant) {
+                setMetadata(prev => ({ ...prev, consultant: user.user_metadata?.full_name || 'Consultor Phant' }));
+            }
+        } catch (e) { /* ignore */ }
+    }
+
+    // 3. LAZY RENDERING TRIGGER
     const timer = setTimeout(() => {
       setIsPreviewReady(true);
     }, 800);
 
     return () => clearTimeout(timer);
   }, []);
+
+  // FIT TO SCREEN LOGIC
+  const fitToScreen = () => {
+    if (previewContainerRef.current) {
+        const containerWidth = previewContainerRef.current.clientWidth;
+        const availableWidth = containerWidth - 80; 
+        const a4WidthPx = 794; 
+        const newZoom = Math.min(Math.max(availableWidth / a4WidthPx, 0.3), 1.3);
+        setZoom(parseFloat(newZoom.toFixed(2)));
+    }
+  };
+
+  useEffect(() => {
+    if (isPreviewReady) {
+        fitToScreen();
+        window.addEventListener('resize', fitToScreen);
+        return () => window.removeEventListener('resize', fitToScreen);
+    }
+  }, [isPreviewReady]);
 
   const loadHistory = async () => {
     const history = await SupabaseService.fetchProposalsHistory();
@@ -200,8 +245,6 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
   // --- GENERATION LAYER (HTML2PDF) ---
   const generatePDF = async () => {
     setIsDownloading(true);
-    
-    // 1. Identify Source
     const sourceElement = document.getElementById('proposal-pages-container');
     if (!sourceElement) {
       setIsDownloading(false);
@@ -209,69 +252,50 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
     }
 
     try {
-      // 2. Clone DOM to avoid messing with current view and remove transforms
       const clone = sourceElement.cloneNode(true) as HTMLElement;
-      
-      // 3. Create Sandbox Container (Fixed A4 dimensions, off-screen)
       const container = document.createElement('div');
       container.style.position = 'absolute';
       container.style.top = '-9999px';
       container.style.left = '0';
-      container.style.width = '210mm'; // Force Exact A4 Width
+      container.style.width = '210mm';
       container.id = 'pdf-generation-sandbox';
       
-      // 4. Reset Clone Styles (Remove Zoom/Transform)
       clone.style.transform = 'scale(1)';
       clone.style.transformOrigin = 'top left';
       clone.style.margin = '0';
       clone.style.width = '100%';
       clone.style.height = 'auto';
       
-      // Reset page margins and shadows for the clone
       const pages = clone.querySelectorAll('.printable-page');
       pages.forEach((page: any) => {
-        page.style.marginBottom = '0'; // Remove UI spacing
-        page.style.boxShadow = 'none'; // Remove UI shadows
-        page.style.height = 'auto';    // Allow height to grow
-        page.style.minHeight = '297mm'; // Minimum A4
+        page.style.marginBottom = '0';
+        page.style.boxShadow = 'none';
+        page.style.height = 'auto';
+        page.style.minHeight = '297mm';
       });
 
       container.appendChild(clone);
       document.body.appendChild(container);
 
-      // 5. Configure html2pdf with BETTER PAGE BREAK SETTINGS
       const opt = {
         margin: 0,
         filename: `${metadata.clientName || 'Proposta'}_PhantLab.pdf`,
         image: { type: 'jpeg', quality: 0.98 },
-        html2canvas: { 
-          scale: 2, 
-          useCORS: true, 
-          scrollY: 0,
-          windowWidth: 794, 
-        },
+        html2canvas: { scale: 2, useCORS: true, scrollY: 0, windowWidth: 794 },
         jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
-        // IMPORTANT: Use 'css' mode to respect break-inside: avoid
         pagebreak: { mode: ['css', 'legacy'] }
       };
 
-      // 6. Safe Execution
-      // Get from global window object (loaded via CDN script)
       const pdfLib = (window as any).html2pdf;
-      
       if (typeof pdfLib === 'function') {
          await pdfLib().set(opt).from(clone).save();
       } else {
-         console.error("HTML2PDF library not loaded correctly", pdfLib);
-         alert("Erro: Biblioteca de PDF não carregou. Verifique sua conexão e recarregue a página.");
+         alert("Erro: Biblioteca de PDF não carregou.");
       }
-
-      // 7. Cleanup
       document.body.removeChild(container);
-
     } catch (err) {
       console.error("PDF Generation Error:", err);
-      alert("Erro ao gerar PDF. Tente novamente.");
+      alert("Erro ao gerar PDF.");
     } finally {
       setIsDownloading(false);
     }
@@ -295,15 +319,13 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
       discountValue: record.metadata?.discountValue || 0
     });
     setActiveTab('solutions');
-    const scrollArea = document.querySelector('.proposal-preview-area');
-    if (scrollArea) scrollArea.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const adjustZoom = (delta: number) => setZoom(prev => Math.min(Math.max(prev + delta, 0.2), 1.5));
   
   const toggleFullscreen = () => {
     if (!document.fullscreenElement) {
-      previewRef.current?.requestFullscreen();
+      previewContainerRef.current?.requestFullscreen();
       setIsFullscreen(true);
     } else {
       if (document.exitFullscreen) document.exitFullscreen();
@@ -320,14 +342,9 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
   return (
     <div className={`flex flex-col lg:flex-row gap-8 animate-in fade-in duration-700 ${isFullscreen ? 'fixed inset-0 z-[100] bg-[#1a1a1a] p-0 overflow-hidden' : ''}`}>
       <style>{`
-        /* FORÇA QUEBRA DE PÁGINA CORRETA NO PDF */
-        .pdf-item {
-          page-break-inside: avoid !important;
-          break-inside: avoid !important;
-        }
-        .print-break-after {
-          page-break-after: always;
-        }
+        .pdf-item { page-break-inside: avoid !important; break-inside: avoid !important; }
+        .print-break-after { page-break-after: always; }
+        .printable-page { box-shadow: 0 10px 40px -10px rgba(0,0,0,0.3); }
       `}</style>
 
       {showPresentation && (
@@ -431,12 +448,14 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
                       )}
                    </div>
 
-                   {/* SHOW/HIDE AI MAP TOGGLE - HIGH CONTRAST */}
-                   <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-200 cursor-pointer hover:border-gray-400 transition-colors" onClick={() => setShowAIAnalysis(!showAIAnalysis)}>
-                        <label className="text-[10px] font-black text-gray-900 uppercase tracking-widest cursor-pointer">Incluir Mapa Estratégico (IA)</label>
-                        <div className={`w-10 h-5 rounded-full relative transition-colors ${showAIAnalysis ? 'bg-[#6113cc]' : 'bg-gray-300'}`}>
-                            <div className={`absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-transform ${showAIAnalysis ? 'translate-x-5' : 'translate-x-0'}`}></div>
-                        </div>
+                   {/* PAGE VISIBILITY TOGGLES */}
+                   <div className="space-y-3 pt-4 border-t border-gray-100">
+                      <h4 className="text-[10px] font-black text-gray-300 uppercase tracking-widest ml-2 mb-2">Estrutura da Proposta</h4>
+                      <ToggleSwitch label="1. Capa (Cover)" checked={showCover} onChange={setShowCover} />
+                      <ToggleSwitch label="2. Mapa Estratégico (IA)" checked={showAIAnalysis} onChange={setShowAIAnalysis} />
+                      <ToggleSwitch label="3. Escopo & Plano" checked={showScope} onChange={setShowScope} />
+                      <ToggleSwitch label="4. Observações & Termos" checked={showObservations} onChange={setShowObservations} />
+                      <ToggleSwitch label="5. Encerramento & Valores" checked={showClosing} onChange={setShowClosing} />
                    </div>
 
                   <div className="space-y-2">
@@ -538,7 +557,6 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
                           <span className="text-[10px] font-black text-brand">{formatCurrency(record.total_value)}</span>
                        </div>
                        
-                       {/* APROVACAO / REPROVACAO */}
                        <div className="flex gap-2 mt-4 pt-4 border-t border-gray-100">
                           {record.status !== 'APPROVED' && (
                             <button 
@@ -621,61 +639,68 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
       )}
 
       {/* --- RIGHT PANEL: PDF PREVIEW --- */}
-      <div className={`flex-1 bg-gray-200 overflow-y-auto custom-scrollbar relative flex justify-center p-8 transition-all ${isFullscreen ? 'bg-[#1a1a1a]' : ''}`}>
+      <div 
+        ref={previewContainerRef}
+        className={`flex-1 bg-gray-200 overflow-y-auto custom-scrollbar relative flex justify-center p-8 transition-all ${isFullscreen ? 'bg-[#1a1a1a] p-0' : ''}`}
+      >
         
         {/* TOOLBAR ZOOM */}
-        <div className="absolute bottom-8 left-1/2 -translate-x-1/2 bg-black text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-6 z-50 hover:scale-105 transition-transform no-print">
-            <button onClick={() => adjustZoom(-0.1)} className="text-lg font-bold hover:text-gray-300">-</button>
+        <div className="fixed bottom-8 left-1/2 md:left-auto md:right-8 md:translate-x-0 -translate-x-1/2 bg-black text-white px-6 py-3 rounded-full shadow-2xl flex items-center gap-4 z-50 hover:scale-105 transition-transform no-print border border-white/10">
+            <button onClick={() => adjustZoom(-0.1)} className="text-lg font-bold hover:text-gray-300 w-8 h-8 flex items-center justify-center">-</button>
             <span className="text-[10px] font-black min-w-[30px] text-center">{Math.round(zoom * 100)}%</span>
-            <button onClick={() => adjustZoom(0.1)} className="text-lg font-bold hover:text-gray-300">+</button>
+            <button onClick={() => adjustZoom(0.1)} className="text-lg font-bold hover:text-gray-300 w-8 h-8 flex items-center justify-center">+</button>
+            <div className="w-px h-4 bg-white/20"></div>
+            <button onClick={fitToScreen} className="text-[10px] font-bold hover:text-blue-400 uppercase tracking-widest">Ajustar</button>
         </div>
 
         {isPreviewReady ? (
           <div 
              id="proposal-pages-container"
-             ref={previewRef}
-             className="origin-top transition-transform duration-200 ease-out"
-             style={{ transform: `scale(${zoom})` }}
+             ref={previewContentRef}
+             className="origin-top transition-transform duration-200 ease-out flex flex-col items-center gap-8"
+             style={{ transform: `scale(${zoom})`, width: '210mm', minHeight: '297mm' }}
           >
              {/* PAGE 1: CAPA */}
-             <div className="printable-page w-[210mm] min-h-[297mm] bg-white shadow-2xl relative flex flex-col justify-between overflow-hidden mb-8 pdf-item">
-                <PhantPattern />
-                <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-blue-600/5 rounded-full blur-[100px] -mr-20 -mt-20"></div>
-                
-                <div className="p-16 relative z-10">
-                   {appConfig.proposalLogoUrl ? (
-                     <img src={appConfig.proposalLogoUrl} alt="Logo" className="h-12 w-auto mb-12 object-contain" />
-                   ) : (
-                     <div className="h-12 mb-12 flex items-center text-4xl font-black">{appConfig.companyName}</div>
-                   )}
-                   <span className="px-4 py-1.5 border border-black rounded-full text-[10px] font-black uppercase tracking-[0.2em]">Proposta Comercial</span>
-                </div>
+             {showCover && (
+                <div className="printable-page w-full min-h-[297mm] bg-white shadow-2xl relative flex flex-col justify-between overflow-hidden pdf-item">
+                    <PhantPattern />
+                    <div className="absolute top-0 right-0 w-[400px] h-[400px] bg-blue-600/5 rounded-full blur-[100px] -mr-20 -mt-20"></div>
+                    
+                    <div className="p-16 relative z-10">
+                    {appConfig.proposalLogoUrl ? (
+                        <img src={appConfig.proposalLogoUrl} alt="Logo" className="h-12 w-auto mb-12 object-contain" />
+                    ) : (
+                        <div className="h-12 mb-12 flex items-center text-4xl font-black">{appConfig.companyName}</div>
+                    )}
+                    <span className="px-4 py-1.5 border border-black rounded-full text-[10px] font-black uppercase tracking-[0.2em]">Proposta Comercial</span>
+                    </div>
 
-                <div className="px-16 space-y-6 relative z-10 mb-auto">
-                   <h1 className="text-7xl font-black tracking-tighter leading-[0.85] text-gray-900 uppercase">
-                      {metadata.headline || 'Impacto & Crescimento'}
-                   </h1>
-                   <div className="w-20 h-2 bg-black"></div>
-                   <p className="text-2xl font-bold text-gray-400">Preparado para <span className="text-gray-900 underline decoration-4 decoration-blue-200">{metadata.clientName}</span></p>
-                </div>
+                    <div className="px-16 space-y-6 relative z-10 mb-auto">
+                    <h1 className="text-7xl font-black tracking-tighter leading-[0.85] text-gray-900 uppercase">
+                        {metadata.headline || 'Impacto & Crescimento'}
+                    </h1>
+                    <div className="w-20 h-2 bg-black"></div>
+                    <p className="text-2xl font-bold text-gray-400">Preparado para <span className="text-gray-900 underline decoration-4 decoration-blue-200">{metadata.clientName}</span></p>
+                    </div>
 
-                <div className="p-16 bg-black text-white relative z-10 mt-20 print-break-after">
-                   <div className="grid grid-cols-2 gap-8">
-                      <div>
-                         <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">Data</span>
-                         <span className="text-sm font-bold">{metadata.date}</span>
-                      </div>
-                      <div>
-                         <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">Consultor</span>
-                         <span className="text-sm font-bold">{metadata.consultant}</span>
-                      </div>
-                   </div>
+                    <div className="p-16 bg-black text-white relative z-10 mt-20 print-break-after">
+                    <div className="grid grid-cols-2 gap-8">
+                        <div>
+                            <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">Data</span>
+                            <span className="text-sm font-bold">{metadata.date}</span>
+                        </div>
+                        <div>
+                            <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest block mb-1">Consultor</span>
+                            <span className="text-sm font-bold">{metadata.consultant}</span>
+                        </div>
+                    </div>
+                    </div>
                 </div>
-             </div>
+             )}
 
              {/* PAGE 2: DIAGNOSTICO E MAPA */}
              {showAIAnalysis && strategicMap.length > 0 && (
-               <div className="printable-page w-[210mm] min-h-[297mm] bg-white shadow-2xl relative p-16 flex flex-col mb-8 pdf-item">
+               <div className="printable-page w-full min-h-[297mm] bg-white shadow-2xl relative p-16 flex flex-col pdf-item print-break-after">
                   <div className="space-y-4 mb-16 border-l-4 border-blue-600 pl-6">
                      <h2 className="text-4xl font-black uppercase tracking-tighter text-gray-900">Diagnóstico <br/> Estratégico</h2>
                      <p className="text-sm font-medium text-gray-500 max-w-sm">Mapeamento de gargalos e oportunidades de crescimento.</p>
@@ -703,59 +728,159 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
              )}
 
              {/* PAGE 3: ESCOPO E INVESTIMENTO */}
-             <div className="printable-page w-[210mm] min-h-[297mm] bg-white shadow-2xl relative flex flex-col mb-8 pdf-item">
-                <div className="p-16 flex-1 space-y-10">
-                   <div className="space-y-4 border-l-4 border-black pl-6">
-                      <h2 className="text-4xl font-black uppercase tracking-tighter text-gray-900">Plano de <br/> Ação</h2>
-                   </div>
+             {showScope && (
+                <div className="printable-page w-full min-h-[297mm] bg-white shadow-2xl relative flex flex-col pdf-item print-break-after">
+                    <div className="p-16 flex-1 space-y-10">
+                        <div className="space-y-4 border-l-4 border-black pl-6">
+                            <h2 className="text-4xl font-black uppercase tracking-tighter text-gray-900">Plano de <br/> Ação</h2>
+                            <p className="text-sm font-medium text-gray-500 max-w-sm">Detalhamento tático das entregas.</p>
+                        </div>
 
-                   <div className="space-y-6">
-                      {proposalItems.map((item, i) => (
-                         <div key={i} className="flex justify-between items-start pb-6 border-b border-gray-100 break-inside-avoid">
-                            <div className="space-y-2 max-w-[70%]">
-                               <div className="flex items-center gap-3">
-                                  <span className="px-2 py-0.5 bg-black text-white text-[8px] font-black uppercase rounded">{item.duration}</span>
-                                  <h3 className="text-lg font-black uppercase tracking-tight">{item.name}</h3>
-                               </div>
-                               <p className="text-xs text-gray-500 leading-relaxed">{item.description}</p>
-                               {item.deliverables && item.deliverables.length > 0 && (
-                                 <ul className="pl-4 pt-1 space-y-1">
-                                   {item.deliverables.slice(0, 3).map((d, idx) => (
-                                     <li key={idx} className="text-[9px] font-bold text-gray-400 list-disc">{d}</li>
-                                   ))}
-                                 </ul>
-                               )}
-                            </div>
-                            <div className="text-right">
-                               <span className="text-sm font-black text-gray-900">{formatCurrency(item.totalPrice)}</span>
-                            </div>
-                         </div>
-                      ))}
-                   </div>
+                        <div className="space-y-6">
+                            {proposalItems.map((item, i) => (
+                                <div key={i} className="flex justify-between items-start pb-6 border-b border-gray-100 break-inside-avoid">
+                                    <div className="space-y-2 max-w-[70%]">
+                                    <div className="flex items-center gap-3">
+                                        <span className="px-2 py-0.5 bg-black text-white text-[8px] font-black uppercase rounded">{item.duration}</span>
+                                        <h3 className="text-lg font-black uppercase tracking-tight">{item.name}</h3>
+                                    </div>
+                                    <p className="text-xs text-gray-500 leading-relaxed">{item.description}</p>
+                                    {item.deliverables && item.deliverables.length > 0 && (
+                                        <ul className="pl-4 pt-1 space-y-1">
+                                        {item.deliverables.slice(0, 3).map((d, idx) => (
+                                            <li key={idx} className="text-[9px] font-bold text-gray-400 list-disc">{d}</li>
+                                        ))}
+                                        </ul>
+                                    )}
+                                    </div>
+                                    <div className="text-right">
+                                        <span className="text-sm font-black text-gray-900">{formatCurrency(item.totalPrice)}</span>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
                 </div>
+             )}
 
-                <div className="bg-gray-50 p-16 border-t border-gray-100 break-inside-avoid">
-                   <div className="flex justify-between items-end mb-8">
-                      <div>
-                         <h3 className="text-xl font-black uppercase tracking-tight text-gray-900 mb-2">Investimento Total</h3>
-                         {metadata.discountValue && metadata.discountValue > 0 && (
-                            <p className="text-xs font-bold text-green-600">Desconto aplicado de {metadata.discountType === 'percent' ? `${metadata.discountValue}%` : formatCurrency(metadata.discountValue)}</p>
-                         )}
-                      </div>
-                      <div className="text-right">
-                         {discountAmount > 0 && <span className="block text-sm font-bold text-gray-400 line-through mb-1">{formatCurrency(subtotal)}</span>}
-                         <span className="text-5xl font-black text-blue-600 tracking-tighter">{formatCurrency(finalPrice)}</span>
-                      </div>
-                   </div>
+             {/* PAGE 4: OBSERVAÇÕES E TERMOS */}
+             {showObservations && (
+                <div className="printable-page w-full min-h-[297mm] bg-white shadow-2xl relative flex flex-col p-16 pdf-item print-break-after">
+                    <div className="space-y-4 mb-12 border-l-4 border-gray-300 pl-6">
+                        <h2 className="text-4xl font-black uppercase tracking-tighter text-gray-900">Observações & <br/> Termos</h2>
+                    </div>
 
-                   {metadata.observations && (
-                      <div className="p-6 bg-white rounded-2xl border border-gray-200">
-                         <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest block mb-2">Observações</span>
-                         <p className="text-xs font-medium text-gray-600 leading-relaxed">{metadata.observations}</p>
-                      </div>
-                   )}
+                    <div className="space-y-10 flex-1">
+                        {metadata.observations && (
+                            <div className="p-8 bg-gray-50 rounded-2xl border border-gray-100">
+                                <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest mb-4">Notas Específicas</h4>
+                                <p className="text-sm font-medium text-gray-700 leading-relaxed whitespace-pre-wrap">{metadata.observations}</p>
+                            </div>
+                        )}
+
+                        <div className="space-y-6">
+                            <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Informativos {appConfig.companyName}</h4>
+                            <div className="grid grid-cols-1 gap-4">
+                                <div className="p-6 border border-gray-100 rounded-xl">
+                                    <h5 className="font-bold text-xs mb-2">Validade da Proposta</h5>
+                                    <p className="text-[10px] text-gray-500 leading-relaxed">Os valores e condições apresentados neste documento são válidos por 15 dias corridos a partir da data de emissão, sujeitos a reajuste após este período.</p>
+                                </div>
+                                <div className="p-6 border border-gray-100 rounded-xl">
+                                    <h5 className="font-bold text-xs mb-2">Confidencialidade</h5>
+                                    <p className="text-[10px] text-gray-500 leading-relaxed">Este documento contém informações estratégicas e proprietárias da {appConfig.companyName}. Sua reprodução ou compartilhamento com terceiros sem autorização prévia é estritamente proibida.</p>
+                                </div>
+                                <div className="p-6 border border-gray-100 rounded-xl">
+                                    <h5 className="font-bold text-xs mb-2">Condições de Pagamento</h5>
+                                    <p className="text-[10px] text-gray-500 leading-relaxed">O início do projeto está condicionado ao aceite formal desta proposta e compensação do pagamento inicial (setup ou primeira parcela), conforme acordado.</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
-             </div>
+             )}
+
+             {/* PAGE 5: ENCERRAMENTO E VALORES (WHITE VERSION) */}
+             {showClosing && (
+                <div className="printable-page w-full min-h-[297mm] bg-white shadow-2xl relative flex flex-col justify-between overflow-hidden pdf-item">
+                    <PhantPattern />
+                    
+                    <div className="p-16 flex-1 flex flex-col">
+                        {/* Header Area */}
+                        <div className="mb-16 border-l-4 border-black pl-6">
+                            <h2 className="text-4xl font-black uppercase tracking-tighter text-gray-900">Investimento & <br/> Formalização</h2>
+                            <p className="text-sm font-medium text-gray-500 mt-2">Resumo financeiro e próximos passos para início imediato.</p>
+                        </div>
+
+                        <div className="flex-1 flex flex-col gap-12">
+                            {/* Box de Preço - Mais discreto/profissional */}
+                            <div className="bg-gray-50 rounded-3xl p-10 border border-gray-100 flex flex-col md:flex-row justify-between items-center shadow-sm">
+                                <div className="space-y-1">
+                                    <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Valor Total do Projeto</p>
+                                    <p className="text-sm font-medium text-gray-600">Setup + Mensalidade (Conforme escopo)</p>
+                                    {discountAmount > 0 && (
+                                        <span className="inline-block px-3 py-1 bg-green-100 text-green-700 text-[9px] font-black uppercase tracking-widest rounded-full mt-2">
+                                            Condição Especial Aplicada
+                                        </span>
+                                    )}
+                                </div>
+                                <div className="text-right">
+                                    {discountAmount > 0 && (
+                                        <span className="block text-sm font-bold text-gray-400 line-through mb-1">{formatCurrency(subtotal)}</span>
+                                    )}
+                                    <span className="text-5xl font-black text-gray-900 tracking-tight leading-none">{formatCurrency(finalPrice)}</span>
+                                </div>
+                            </div>
+
+                            {/* Próximos Passos - Contexto */}
+                            <div className="space-y-6">
+                                <h4 className="text-[10px] font-black text-gray-300 uppercase tracking-widest ml-1">Fluxo de Ativação</h4>
+                                <div className="grid grid-cols-3 gap-6">
+                                    {[
+                                        { n: '01', t: 'Aceite', d: 'Aprovação desta proposta comercial.' },
+                                        { n: '02', t: 'Contrato', d: 'Envio e assinatura digital da minuta jurídica.' },
+                                        { n: '03', t: 'Kick-off', d: 'Reunião de alinhamento e início do setup.' }
+                                    ].map((step, i) => (
+                                        <div key={i} className="p-6 border border-gray-100 rounded-2xl bg-white relative overflow-hidden group">
+                                            <div className="absolute top-0 right-0 p-4 opacity-10 font-black text-4xl text-gray-300 group-hover:scale-110 transition-transform">{step.n}</div>
+                                            <span className="w-8 h-8 rounded-lg bg-black text-white flex items-center justify-center text-xs font-bold mb-4">{step.n}</span>
+                                            <h5 className="font-bold text-sm text-gray-900 mb-2">{step.t}</h5>
+                                            <p className="text-[10px] text-gray-500 leading-relaxed">{step.d}</p>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Assinaturas */}
+                    <div className="p-16 bg-white border-t border-gray-100 relative z-10">
+                        <div className="grid grid-cols-2 gap-16 mb-8">
+                            <div className="space-y-4">
+                                <div className="h-px bg-black w-full"></div>
+                                <div>
+                                    <p className="font-bold text-base text-gray-900">{metadata.clientName}</p>
+                                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">De Acordo / Responsável</p>
+                                </div>
+                            </div>
+                            <div className="space-y-4">
+                                <div className="h-px bg-gray-300 w-full"></div>
+                                <div>
+                                    <p className="font-bold text-base text-gray-900">{metadata.consultant}</p>
+                                    <p className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Consultor {appConfig.companyName}</p>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div className="flex justify-between items-center pt-8 opacity-60">
+                            <p className="text-[8px] font-black text-gray-400 uppercase tracking-widest">Validade da Proposta: 15 dias</p>
+                            <div className="flex items-center gap-2">
+                                <span className="text-[8px] font-bold text-gray-300 uppercase">Powered by</span>
+                                {appConfig.systemLogoUrl && <img src={appConfig.systemLogoUrl} className="h-4 grayscale opacity-50" alt="Logo" />}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+             )}
 
           </div>
         ) : (
