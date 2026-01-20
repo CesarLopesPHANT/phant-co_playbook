@@ -15,17 +15,21 @@ const getEnvVar = (key: string) => {
   return undefined;
 };
 
-const getAIInstance = () => {
-  const apiKey = getEnvVar('API_KEY');
+// Helper assíncrono para obter a instância com a chave correta
+const getAIClient = async () => {
+  const config = await SupabaseService.fetchAIConfig();
+  // Prioriza a chave salva no banco, depois a variável de ambiente
+  const apiKey = config?.apiKey || getEnvVar('API_KEY');
+  
   if (!apiKey) {
-    throw new Error("API_KEY is not defined in the environment.");
+    throw new Error("API_KEY não configurada. Por favor, adicione sua chave nas Configurações > Inteligência.");
   }
   return new GoogleGenAI({ apiKey });
 };
 
 export const getSalesMentorStream = async (userMessage: string, onChunk: (text: string) => void) => {
   try {
-    const ai = getAIInstance();
+    const ai = await getAIClient();
     const savedConfig = await SupabaseService.fetchAIConfig();
     
     const config = savedConfig || {
@@ -64,7 +68,9 @@ export const getSalesMentorStream = async (userMessage: string, onChunk: (text: 
     return fullText;
   } catch (error: any) {
     console.error("Gemini Stream Error:", error);
-    if (error.name === 'AbortError' || error.message?.includes('aborted')) {
+    if (error.message?.includes('API_KEY')) {
+        onChunk("ERRO: Chave API não configurada. Vá em Administração > Inteligência e adicione sua chave do Google AI Studio.");
+    } else if (error.name === 'AbortError' || error.message?.includes('aborted')) {
       onChunk("A conexão foi interrompida pelo servidor. Por favor, tente novamente.");
     } else {
       onChunk("Desculpe, tive um problema ao processar sua solicitação. Verifique sua conexão ou a chave API.");
@@ -77,7 +83,7 @@ export const improveObservationText = async (text: string): Promise<string> => {
   if (!text.trim()) return text;
   
   try {
-    const ai = getAIInstance();
+    const ai = await getAIClient();
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: {
@@ -96,7 +102,7 @@ export const improveObservationText = async (text: string): Promise<string> => {
 
 export const generateStrategicMapping = async (metadata: ProposalMetadata): Promise<StrategicMapItem[]> => {
   try {
-    const ai = getAIInstance();
+    const ai = await getAIClient();
     const prompt = `
       Analise a empresa ${metadata.clientName} (${metadata.industry}).
       Notas da reunião: Dores: ${metadata.meetingNotesPains}, Desejos: ${metadata.meetingNotesDesires}.
@@ -134,7 +140,7 @@ export const generateStrategicMapping = async (metadata: ProposalMetadata): Prom
 
 export const suggestSolutionDetails = async (productName: string): Promise<Partial<SolutionItem>> => {
   try {
-    const ai = getAIInstance();
+    const ai = await getAIClient();
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: { parts: [{ text: `Gere detalhes técnicos (promessa, descrição, maturidade) para a solução comercial: ${productName}` }] },
@@ -158,7 +164,7 @@ export const suggestSolutionDetails = async (productName: string): Promise<Parti
 
 export const parseBulkSolutions = async (raw: string) => {
   try {
-    const ai = getAIInstance();
+    const ai = await getAIClient();
     const res = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: { parts: [{ text: `Extraia as soluções comerciais deste texto e retorne um array JSON: ${raw}` }] },

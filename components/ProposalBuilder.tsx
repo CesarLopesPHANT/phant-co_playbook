@@ -36,7 +36,9 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
     observations: '',
     date: new Date().toLocaleDateString('pt-BR'),
     consultant: 'Estrategista PhantLab',
-    headline: 'PROPOSTA DE MOVIMENTO ESTRATÉGICO'
+    headline: 'PROPOSTA DE MOVIMENTO ESTRATÉGICO',
+    discountType: 'percent',
+    discountValue: 0
   });
   
   // UI States
@@ -45,6 +47,7 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
   const [zoom, setZoom] = useState(1.0); // Default A4 100%
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [showPresentation, setShowPresentation] = useState(false);
+  const [showAIAnalysis, setShowAIAnalysis] = useState(true); // Toggle para mostrar/ocultar mapa IA
   
   // Async Process States
   const [isGeneratingAI, setIsGeneratingAI] = useState(false);
@@ -65,7 +68,6 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
 
     // 2. LAZY RENDERING TRIGGER
     // Wait for the parent layout (flexbox) to settle before rendering the heavy PDF DOM
-    // This prevents "width(-1)" errors in console from libraries trying to measure 0-size elements
     const timer = setTimeout(() => {
       setIsPreviewReady(true);
     }, 800);
@@ -78,7 +80,25 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
     setProposalHistory(history || []);
   };
 
-  const total = proposalItems.reduce((acc, curr) => acc + curr.totalPrice, 0);
+  const calculateTotals = () => {
+    const subtotal = proposalItems.reduce((acc, curr) => acc + curr.totalPrice, 0);
+    let finalPrice = subtotal;
+    let discountAmount = 0;
+
+    if (metadata.discountValue && metadata.discountValue > 0) {
+      if (metadata.discountType === 'percent') {
+        discountAmount = subtotal * (metadata.discountValue / 100);
+      } else {
+        discountAmount = metadata.discountValue;
+      }
+      finalPrice = Math.max(0, subtotal - discountAmount);
+    }
+
+    return { subtotal, discountAmount, finalPrice };
+  };
+
+  const { subtotal, discountAmount, finalPrice } = calculateTotals();
+
   const formatCurrency = (val: number) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
@@ -158,7 +178,7 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
       const res = await SupabaseService.saveProposal(
         metadata.clientName,
         metadata.industry || "N/A",
-        total,
+        finalPrice,
         metadata.consultant,
         proposalItems,
         metadata
@@ -235,7 +255,6 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
       };
 
       // 6. Safe Execution
-      // Handle potential import issues by checking global or imported object
       // @ts-ignore
       const pdfLib = html2pdf.default || html2pdf || (window as any).html2pdf;
       
@@ -270,7 +289,9 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
       observations: record.metadata?.observations || '',
       date: record.metadata?.date || new Date(record.created_at).toLocaleDateString('pt-BR'),
       consultant: record.consultant || 'Estrategista PhantLab',
-      headline: record.metadata?.headline || 'PROPOSTA DE MOVIMENTO ESTRATÉGICO'
+      headline: record.metadata?.headline || 'PROPOSTA DE MOVIMENTO ESTRATÉGICO',
+      discountType: record.metadata?.discountType || 'percent',
+      discountValue: record.metadata?.discountValue || 0
     });
     setActiveTab('solutions');
     const scrollArea = document.querySelector('.proposal-preview-area');
@@ -372,6 +393,41 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
                     </div>
                   </div>
 
+                   {/* DISCOUNT SELECTOR */}
+                   <div className="p-4 bg-gray-50 rounded-2xl space-y-4 border border-gray-100">
+                      <label className="text-[10px] font-black text-brand uppercase tracking-widest">Aplicar Desconto</label>
+                      <div className="flex gap-2">
+                        <select 
+                          value={metadata.discountType}
+                          onChange={e => setMetadata({...metadata, discountType: e.target.value as 'percent' | 'fixed'})}
+                          className="bg-white p-3 rounded-xl font-bold text-xs border border-gray-200 outline-none"
+                        >
+                          <option value="percent">% OFF</option>
+                          <option value="fixed">R$ OFF</option>
+                        </select>
+                        <input 
+                          type="number"
+                          value={metadata.discountValue || ''}
+                          onChange={e => setMetadata({...metadata, discountValue: parseFloat(e.target.value)})}
+                          placeholder={metadata.discountType === 'percent' ? 'Ex: 10' : 'Ex: 500'}
+                          className="flex-1 bg-white p-3 rounded-xl font-bold text-xs border border-gray-200 outline-none"
+                        />
+                      </div>
+                      {discountAmount > 0 && (
+                        <div className="text-right text-[10px] font-bold text-gray-400">
+                           Desconto aplicado: -{formatCurrency(discountAmount)}
+                        </div>
+                      )}
+                   </div>
+
+                   {/* SHOW/HIDE AI MAP TOGGLE - HIGH CONTRAST */}
+                   <div className="flex items-center justify-between p-4 bg-gray-50 rounded-2xl border border-gray-200 cursor-pointer hover:border-gray-400 transition-colors" onClick={() => setShowAIAnalysis(!showAIAnalysis)}>
+                        <label className="text-[10px] font-black text-gray-900 uppercase tracking-widest cursor-pointer">Incluir Mapa Estratégico (IA)</label>
+                        <div className={`w-10 h-5 rounded-full relative transition-colors ${showAIAnalysis ? 'bg-[#6113cc]' : 'bg-gray-300'}`}>
+                            <div className={`absolute top-1 left-1 w-3 h-3 bg-white rounded-full transition-transform ${showAIAnalysis ? 'translate-x-5' : 'translate-x-0'}`}></div>
+                        </div>
+                   </div>
+
                   <div className="space-y-2">
                     <label className="text-[10px] font-black text-amber-500 uppercase tracking-widest ml-2">Dores do Cliente</label>
                     <textarea 
@@ -385,7 +441,7 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
                   <button 
                     onClick={handleGenerateAI}
                     disabled={isGeneratingAI}
-                    className="w-full py-5 bg-brand text-white rounded-[30px] font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all shadow-xl disabled:opacity-50"
+                    className="w-full py-5 bg-black text-white rounded-[30px] font-black text-[10px] uppercase tracking-widest hover:bg-gray-800 transition-all shadow-xl disabled:opacity-50"
                   >
                     {isGeneratingAI ? 'ANALISANDO WEB...' : '✨ Analisar Empresa com IA'}
                   </button>
@@ -512,7 +568,10 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
 
               <div className="flex justify-between items-end">
                   <span className="text-[10px] font-black text-white/30 uppercase tracking-widest">Valor Final</span>
-                  <span className="text-3xl font-black tracking-tighter">{formatCurrency(total)}</span>
+                  <div className="text-right">
+                    {discountAmount > 0 && <span className="text-xs line-through text-white/40 block">{formatCurrency(subtotal)}</span>}
+                    <span className="text-3xl font-black tracking-tighter">{formatCurrency(finalPrice)}</span>
+                  </div>
               </div>
               
               <div className="grid grid-cols-2 gap-2">
@@ -569,7 +628,7 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
              {isFullscreen ? (
                 'Fechar'
              ) : (
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 3h6m0 0v6m0-6L14 10M9 3H3m0 0v6m0-6l7 7M15 21h6m0 0v-6m0 6l-7-7M9 21H3m0 0v-6m0 6l7-7" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M15 3h6m0 0v6m0-6L14 10M9 3H3m0 0v6m0-6l7 7M15 21h6m0 0v-6m0 6l7-7M9 21H3m0 0v-6m0 6l7-7" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"/></svg>
              )}
           </button>
         </div>
@@ -587,11 +646,11 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
                 <PhantPattern />
                 <div className="relative z-10 flex justify-between items-start">
                   <div className="w-48 h-auto overflow-hidden flex items-center justify-start text-black font-black">
-                     {appConfig.proposalLogoUrl ? (
-                       <img src={appConfig.proposalLogoUrl} alt="Logo" className="w-full h-auto object-contain" />
-                     ) : (
-                       <span className="text-white text-4xl">{appConfig.companyName.charAt(0) || 'P'}</span>
-                     )}
+                     <img 
+                       src={appConfig.proposalLogoUrl || "http://phant.com.br/uploads/logo_light.png"} 
+                       alt="Logo" 
+                       className="w-full h-auto object-contain" 
+                     />
                   </div>
                   <div className="text-right">
                       <p className="text-[10px] font-black uppercase tracking-[0.4em] text-brand">Estrategista Comercial</p>
@@ -621,52 +680,54 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
               </section>
 
               {/* PÁGINA 2: MAPA ESTRATÉGICO */}
-              <section className="printable-page w-[210mm] min-h-[297mm] bg-[#F9F9F9] text-black p-24 flex flex-col justify-between shadow-2xl shrink-0 mb-12 print:mb-0 print:shadow-none print-break-after">
-                <div className="flex justify-between items-center border-b-4 border-black pb-10">
-                    <h2 className="text-4xl font-black tracking-tighter uppercase leading-none">Mapa de<br/>Movimento.</h2>
-                    <span className="text-[10px] font-black uppercase tracking-widest bg-black text-white px-4 py-1">PHANT AI INSIGHT</span>
-                </div>
+              {showAIAnalysis && (
+                <section className="printable-page w-[210mm] min-h-[297mm] bg-[#F9F9F9] text-black p-24 flex flex-col justify-between shadow-2xl shrink-0 mb-12 print:mb-0 print:shadow-none print-break-after">
+                  <div className="flex justify-between items-center border-b-4 border-black pb-10">
+                      <h2 className="text-4xl font-black tracking-tighter uppercase leading-none">Mapa de<br/>Movimento.</h2>
+                      <span className="text-[10px] font-black uppercase tracking-widest bg-black text-white px-4 py-1">PHANT AI INSIGHT</span>
+                  </div>
 
-                <div className="flex-1 py-16 flex flex-col justify-center space-y-1">
-                    <div className="grid grid-cols-2 gap-px bg-black/10 border border-black/10">
-                      <div className="bg-black text-white/40 p-6 text-[10px] font-black uppercase tracking-widest text-center">Estado Atual (Dissonância)</div>
-                      <div className="bg-brand text-white p-6 text-[10px] font-black uppercase tracking-widest text-center">Estado Desejado (Clareza {appConfig.companyName})</div>
-                    </div>
+                  <div className="flex-1 py-16 flex flex-col justify-center space-y-1">
+                      <div className="grid grid-cols-2 gap-px bg-black/10 border border-black/10">
+                        <div className="bg-black text-white/40 p-6 text-[10px] font-black uppercase tracking-widest text-center">Estado Atual (Dissonância)</div>
+                        <div className="bg-brand text-white p-6 text-[10px] font-black uppercase tracking-widest text-center">Estado Desejado (Clareza {appConfig.companyName})</div>
+                      </div>
 
-                    {strategicMap.length > 0 ? strategicMap.map((map, i) => (
-                      <div key={i} className="grid grid-cols-2 gap-px bg-black/5">
-                        <div className="bg-white p-12 border-r border-black/5 flex flex-col justify-center min-h-[160px]">
-                            <span className="text-red-500 font-black text-[30px] mb-4 opacity-20">0{i+1}</span>
-                            <p className="text-sm font-medium text-black/50 leading-relaxed italic">"{map.current}"</p>
+                      {strategicMap.length > 0 ? strategicMap.map((map, i) => (
+                        <div key={i} className="grid grid-cols-2 gap-px bg-black/5">
+                          <div className="bg-white p-12 border-r border-black/5 flex flex-col justify-center min-h-[160px]">
+                              <span className="text-red-500 font-black text-[30px] mb-4 opacity-20">0{i+1}</span>
+                              <p className="text-sm font-medium text-black/50 leading-relaxed italic">"{map.current}"</p>
+                          </div>
+                          <div className="bg-white p-12 flex flex-col justify-center relative">
+                              <div className="absolute left-[-10px] top-1/2 -translate-y-1/2 w-5 h-5 bg-brand rotate-45 flex items-center justify-center">
+                                <svg className="w-3 h-3 text-white -rotate-45" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" strokeWidth="4"/></svg>
+                              </div>
+                              <p className="text-base font-black text-black leading-tight tracking-tight">{map.desired}</p>
+                          </div>
                         </div>
-                        <div className="bg-white p-12 flex flex-col justify-center relative">
-                            <div className="absolute left-[-10px] top-1/2 -translate-y-1/2 w-5 h-5 bg-brand rotate-45 flex items-center justify-center">
-                              <svg className="w-3 h-3 text-white -rotate-45" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path d="M9 5l7 7-7 7" strokeWidth="4"/></svg>
-                            </div>
-                            <p className="text-base font-black text-black leading-tight tracking-tight">{map.desired}</p>
+                      )) : (
+                        <div className="py-40 text-center opacity-10 font-black uppercase tracking-[0.3em]">Gerando Contexto Estratégico...</div>
+                      )}
+                  </div>
+
+                  <div className="p-12 bg-black text-white flex justify-between items-center rounded-2xl">
+                      <div>
+                        <p className="text-[10px] font-black uppercase tracking-widest opacity-50 mb-2">Análise proprietária baseada em IA</p>
+                        <div className="flex gap-4">
+                            <span className="text-[9px] font-bold uppercase text-brand">Website • Instagram • Ads</span>
                         </div>
                       </div>
-                    )) : (
-                      <div className="py-40 text-center opacity-10 font-black uppercase tracking-[0.3em]">Gerando Contexto Estratégico...</div>
-                    )}
-                </div>
-
-                <div className="p-12 bg-black text-white flex justify-between items-center rounded-2xl">
-                    <div>
-                      <p className="text-[10px] font-black uppercase tracking-widest opacity-50 mb-2">Análise proprietária baseada em IA</p>
-                      <div className="flex gap-4">
-                          <span className="text-[9px] font-bold uppercase text-brand">Website • Instagram • Ads</span>
+                      <div className="w-32 h-auto overflow-hidden flex items-center justify-center">
+                        <img 
+                          src={appConfig.proposalLogoUrl || "http://phant.com.br/uploads/logo_light.png"} 
+                          alt="Logo" 
+                          className="w-full h-auto object-contain" 
+                        />
                       </div>
-                    </div>
-                    <div className="w-32 h-auto overflow-hidden flex items-center justify-center">
-                       {appConfig.proposalLogoUrl ? (
-                         <img src={appConfig.proposalLogoUrl} alt="Logo" className="w-full h-auto object-contain" />
-                       ) : (
-                         <span className="text-white font-black text-2xl">{appConfig.companyName.charAt(0) || 'P'}</span>
-                       )}
-                    </div>
-                </div>
-              </section>
+                  </div>
+                </section>
+              )}
 
               {/* PÁGINA 3: ESCOPO TÁTICO */}
               <section className="printable-page w-[210mm] min-h-[297mm] bg-white text-black p-24 flex flex-col shadow-2xl shrink-0 mb-12 print:mb-0 print:shadow-none print-break-after">
@@ -677,7 +738,14 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
                     </div>
                     <div className="text-right">
                       <p className="text-[10px] font-black uppercase tracking-widest text-black/30">Investimento Total</p>
-                      <p className="text-4xl font-black tracking-tighter text-brand">{formatCurrency(total)}</p>
+                      {discountAmount > 0 ? (
+                        <div>
+                          <p className="text-xl font-bold tracking-tighter text-gray-400 line-through">{formatCurrency(subtotal)}</p>
+                          <p className="text-5xl font-black tracking-tighter text-brand">{formatCurrency(finalPrice)}</p>
+                        </div>
+                      ) : (
+                          <p className="text-4xl font-black tracking-tighter text-brand">{formatCurrency(finalPrice)}</p>
+                      )}
                     </div>
                 </div>
 
@@ -733,6 +801,41 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
                       )}
                     </div>
                 </footer>
+              </section>
+
+              {/* PÁGINA 4: SELOS E CONTATO (NOVA) */}
+              <section className="printable-page w-[210mm] min-h-[297mm] bg-[#111] text-white p-24 flex flex-col justify-center items-center text-center shadow-2xl shrink-0 mb-12 print:mb-0 print:shadow-none print-break-after">
+                <PhantPattern />
+                
+                <div className="relative z-10 space-y-16">
+                   <div className="w-64 mx-auto">
+                      <img 
+                        src="http://phant.com.br/uploads/logo_light.png" 
+                        alt="PhantLab" 
+                        className="w-full h-auto object-contain" 
+                      />
+                   </div>
+                   
+                   <div className="space-y-4">
+                      <p className="text-xl font-medium text-white/50 tracking-wide">Crescimento é Movimento Estratégico.</p>
+                   </div>
+
+                   <div className="w-32 h-1 bg-white/20 mx-auto"></div>
+
+                   <div className="flex justify-center items-center gap-8 py-8">
+                       <div className="bg-white text-black p-4 rounded-xl font-black text-xs uppercase w-32 h-16 flex items-center justify-center">
+                          Google Partner
+                       </div>
+                       <div className="bg-white text-black p-4 rounded-xl font-black text-xs uppercase w-32 h-16 flex items-center justify-center">
+                          Meta Business
+                       </div>
+                   </div>
+
+                   <div className="space-y-4 pt-10">
+                      <a href="https://www.phant.com.br" className="block text-2xl font-black tracking-widest hover:text-brand transition-colors">WWW.PHANT.COM.BR</a>
+                      <p className="text-sm font-bold text-white/40 uppercase tracking-[0.2em]">@phant.br</p>
+                   </div>
+                </div>
               </section>
             </div>
         ) : (

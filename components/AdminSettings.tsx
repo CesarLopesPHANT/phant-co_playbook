@@ -29,6 +29,7 @@ const AdminSettings: React.FC = () => {
   const [historyRealized, setHistoryRealized] = useState<Record<string, number>>({});
 
   const [aiConfig, setAiConfig] = useState<AIConfig>({
+    apiKey: "",
     systemInstruction: "",
     temperature: 0.8,
     maxOutputTokens: 6000,
@@ -77,7 +78,7 @@ const AdminSettings: React.FC = () => {
       });
 
       if (sols) setSolutions(sols);
-      if (ai) setAiConfig(ai);
+      if (ai) setAiConfig(prev => ({ ...prev, ...ai })); // Merge para manter defaults se necessário
       if (ess) setEssencia(ess);
       if (branding) setAppConfig(branding);
       setGoals(generateGoalList(loadedGoals));
@@ -776,6 +777,31 @@ const AdminSettings: React.FC = () => {
               </div>
 
               <div className="space-y-6">
+                
+                {/* NEW API KEY INPUT */}
+                <div className="p-6 bg-blue-50 border border-blue-100 rounded-2xl space-y-4">
+                    <div className="flex justify-between items-center">
+                       <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-2">
+                          Google Gemini API Key
+                          <span className="text-xs">🔑</span>
+                       </label>
+                       <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-[9px] font-bold text-blue-400 hover:text-blue-600 uppercase tracking-widest underline">
+                          Obter Chave no AI Studio
+                       </a>
+                    </div>
+                    <input 
+                      type="password" 
+                      value={aiConfig.apiKey || ''} 
+                      onChange={e => setAiConfig({...aiConfig, apiKey: e.target.value})}
+                      className="w-full bg-white p-4 rounded-xl font-mono text-sm border border-blue-200 focus:ring-2 focus:ring-blue-500 outline-none"
+                      placeholder="AIzaSy..."
+                    />
+                    <p className="text-[9px] text-blue-400 font-medium leading-relaxed">
+                       Esta chave será usada para todas as funcionalidades de IA (Mentor, Melhoria de Texto, Copiloto). 
+                       Se deixada em branco, o sistema tentará usar a chave de ambiente do servidor (se configurada).
+                    </p>
+                </div>
+
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">System Instruction (O Cérebro do Mentor)</label>
                   <textarea 

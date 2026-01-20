@@ -62,7 +62,7 @@ export class CopilotService {
   private script: ScriptDefinition;
   private speechEngine: SpeechEngine | null = null;
   private sessionId: string | null = null;
-  private ai: GoogleGenAI;
+  private ai: GoogleGenAI | null = null;
   
   // State Callbacks (Updated to use Contracts)
   private onTranscriptUpdate: (segments: TranscriptChunk[]) => void;
@@ -86,14 +86,6 @@ export class CopilotService {
     this.onTranscriptUpdate = callbacks.onTranscript;
     this.onStateUpdate = callbacks.onState;
     this.onSuggestion = callbacks.onSuggestion;
-    
-    // Config Gemini
-    const apiKey = (typeof process !== 'undefined' && process.env) ? process.env['API_KEY'] : undefined;
-    if (apiKey) {
-      this.ai = new GoogleGenAI({ apiKey });
-    } else {
-      this.ai = {} as any; 
-    }
   }
 
   public setScript(script: ScriptDefinition) {
@@ -102,6 +94,16 @@ export class CopilotService {
 
   async startSession(clientName: string): Promise<string> {
     try {
+      // Initialize AI with saved key or env var
+      const config = await SupabaseService.fetchAIConfig();
+      const apiKey = config?.apiKey || ((typeof process !== 'undefined' && process.env) ? process.env['API_KEY'] : undefined);
+      
+      if (apiKey) {
+        this.ai = new GoogleGenAI({ apiKey });
+      } else {
+        console.warn("Copilot iniciado sem Chave API. Recursos de IA estarão desabilitados.");
+      }
+
       const session = await SupabaseService.createAssistSession(clientName, this.script.id, this.script.version);
       
       if (!session) {
@@ -141,7 +143,9 @@ export class CopilotService {
     this.speechEngine?.stop();
     if (this.sessionId) {
       await SupabaseService.endAssistSession(this.sessionId);
-      await this.generateFinalScore();
+      if (this.ai) {
+          await this.generateFinalScore();
+      }
     }
   }
 

@@ -14,9 +14,45 @@ const PHANT_PURPLE = "#6113cc";
 const PHANT_LOGO_URL = "http://phant.com.br/uploads/logo_light.png";
 
 const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, items, strategicMap, appConfig, onClose }) => {
-  const total = items.reduce((acc, curr) => acc + curr.totalPrice, 0);
+  const calculateTotals = () => {
+    const subtotal = items.reduce((acc, curr) => acc + curr.totalPrice, 0);
+    let finalPrice = subtotal;
+    let discountAmount = 0;
+
+    if (metadata.discountValue && metadata.discountValue > 0) {
+      if (metadata.discountType === 'percent') {
+        discountAmount = subtotal * (metadata.discountValue / 100);
+      } else {
+        discountAmount = metadata.discountValue;
+      }
+      finalPrice = Math.max(0, subtotal - discountAmount);
+    }
+
+    return { subtotal, discountAmount, finalPrice };
+  };
+
+  const { subtotal, discountAmount, finalPrice } = calculateTotals();
   const formatCurrency = (val: number) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+
+  const handleShare = async () => {
+    const shareData = {
+      title: `Proposta ${metadata.clientName} - PhantLab`,
+      text: `Confira a proposta estratégica preparada para ${metadata.clientName}.`,
+      url: window.location.href
+    };
+
+    try {
+      if (navigator.share) {
+        await navigator.share(shareData);
+      } else {
+        await navigator.clipboard.writeText(window.location.href);
+        alert('Link copiado para a área de transferência!');
+      }
+    } catch (err) {
+      console.log('Error sharing', err);
+    }
+  };
 
   return (
     <div className="fixed inset-0 z-[200] bg-black text-white overflow-y-auto selection:bg-purple-500 selection:text-white font-sans scroll-smooth">
@@ -51,11 +87,17 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
       `}</style>
 
       {/* FIXED HEADER */}
-      <nav className="fixed top-0 left-0 right-0 p-8 flex justify-between items-center z-[210] pointer-events-none">
+      <nav className="fixed top-0 left-0 right-0 p-8 flex justify-between items-center z-[210] pointer-events-none gap-4">
         <div className="pointer-events-auto">
-          <img src={PHANT_LOGO_URL} alt="Phant" className="h-12 md:h-16 w-auto drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]" />
+            <img src={PHANT_LOGO_URL} alt="Phant" className="h-8 w-auto opacity-50 hover:opacity-100 transition-opacity" />
         </div>
         <div className="flex gap-4 pointer-events-auto">
+          <button 
+            onClick={handleShare}
+            className="px-6 py-4 bg-white/5 border border-white/10 rounded-full hover:bg-white/10 transition-all text-white font-bold text-xs uppercase tracking-widest flex items-center gap-2"
+          >
+            <span>🔗</span> Compartilhar
+          </button>
           <button 
             onClick={onClose}
             className="p-4 bg-white/5 border border-white/10 rounded-full hover:bg-white/10 transition-all text-white/40 hover:text-white"
@@ -216,7 +258,8 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
               <div className="p-16 bg-white/[0.03] border-2 border-purple-600/30 rounded-[60px] space-y-12 backdrop-blur-xl">
                  <div className="space-y-4">
                     <span className="text-xs font-black uppercase tracking-[0.4em] text-white/40">Investimento Estratégico Total</span>
-                    <div className="text-7xl md:text-[7rem] font-black tracking-tighter italic">{formatCurrency(total)}</div>
+                    {discountAmount > 0 && <div className="text-2xl font-bold tracking-tighter italic line-through text-white/30">{formatCurrency(subtotal)}</div>}
+                    <div className="text-7xl md:text-[7rem] font-black tracking-tighter italic">{formatCurrency(finalPrice)}</div>
                     {metadata.observations && <p className="text-white/40 font-medium italic mt-6 max-w-xl mx-auto text-sm leading-relaxed">{metadata.observations}</p>}
                  </div>
 

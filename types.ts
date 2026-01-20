@@ -65,6 +65,9 @@ export interface ProposalMetadata {
   date: string;
   consultant: string;
   headline?: string;
+  // Campos de Desconto
+  discountType?: 'percent' | 'fixed';
+  discountValue?: number;
 }
 
 export interface ProposalRecord {
@@ -115,6 +118,7 @@ export interface ChatMessage {
 }
 
 export interface AIConfig {
+  apiKey?: string; // Chave API Opcional (se não estiver no ENV)
   systemInstruction: string;
   temperature: number;
   maxOutputTokens: number;
