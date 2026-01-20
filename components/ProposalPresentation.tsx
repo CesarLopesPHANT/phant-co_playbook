@@ -195,7 +195,7 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
           </div>
         </section>
 
-        {/* SLIDE 4: ESCOPO TÁTICO (OFFER) */}
+        {/* SLIDE 4: ESCOPO TÁTICO (FULL TECHNICAL SHEET) */}
         <section id="scope" className="bg-[#0a0a0a]">
            <div className="max-w-7xl mx-auto w-full space-y-20">
              <div className="flex flex-col md:flex-row md:items-end justify-between gap-10">
@@ -214,21 +214,43 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
              <div className="space-y-8">
                 {items.map((item, i) => (
                   <div key={i} className="flex flex-col md:flex-row gap-10 p-10 bg-white/[0.03] border border-white/5 rounded-[40px] hover:bg-white/[0.05] transition-all">
-                     <div className="md:w-1/3 space-y-4">
-                        <span className="text-[10px] font-black uppercase tracking-widest px-4 py-1 bg-purple-600 rounded-full">{item.duration}</span>
-                        <h3 className="text-3xl font-black italic tracking-tighter uppercase">{item.name}</h3>
+                     <div className="md:w-1/3 space-y-6">
+                        <div className="space-y-4">
+                            <span className="text-[10px] font-black uppercase tracking-widest px-4 py-1 bg-purple-600 rounded-full">{item.duration}</span>
+                            <h3 className="text-3xl font-black italic tracking-tighter uppercase leading-tight">{item.name}</h3>
+                        </div>
+                        {(item.promessa) && (
+                           <p className="text-sm text-purple-200/80 italic border-l-2 border-purple-500 pl-4 font-medium">
+                              "{item.promessa}"
+                           </p>
+                        )}
+                        {item.diferenciais && item.diferenciais.length > 0 && (
+                            <div className="flex flex-wrap gap-2">
+                                {item.diferenciais.map((d, idx) => (
+                                    <span key={idx} className="px-3 py-1 bg-white/5 border border-white/10 rounded-lg text-[9px] font-bold text-white/60 uppercase">{d}</span>
+                                ))}
+                            </div>
+                        )}
                      </div>
+
                      <div className="md:w-2/3 grid grid-cols-1 md:grid-cols-2 gap-10 border-l border-white/10 pl-0 md:pl-10">
                         <div className="space-y-4">
-                           <h4 className="text-[10px] font-black uppercase tracking-widest text-white/30">A Estratégia</h4>
-                           <p className="text-sm text-white/60 font-medium leading-relaxed">{item.description || "Implementação tática para ganho de market share imediato."}</p>
+                           <h4 className="text-[10px] font-black uppercase tracking-widest text-white/30">Descrição Técnica</h4>
+                           <p className="text-sm text-white/60 font-medium leading-relaxed whitespace-pre-wrap">{item.description || "Implementação tática para ganho de market share imediato."}</p>
+                           
+                           {item.resultado_esperado && (
+                               <div className="pt-4 mt-4 border-t border-white/5">
+                                   <span className="text-[9px] font-black text-green-400 uppercase tracking-widest block mb-1">Resultado Esperado</span>
+                                   <p className="text-xs text-white/80">{item.resultado_esperado}</p>
+                               </div>
+                           )}
                         </div>
                         <div className="space-y-4">
-                           <h4 className="text-[10px] font-black uppercase tracking-widest text-white/30">Principais Marcos</h4>
+                           <h4 className="text-[10px] font-black uppercase tracking-widest text-white/30">Entregáveis & Escopo</h4>
                            <ul className="space-y-2">
                              {(item.deliverables || ['Setup Tecnológico', 'Validado em Campo', 'Relatório de ROAS']).map((d, idx) => (
-                               <li key={idx} className="flex items-center gap-3 text-xs font-bold">
-                                 <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
+                               <li key={idx} className="flex items-start gap-3 text-xs font-bold text-white/70">
+                                 <span className="w-1.5 h-1.5 rounded-full bg-purple-500 mt-1.5 shrink-0"></span>
                                  {d}
                                </li>
                              ))}

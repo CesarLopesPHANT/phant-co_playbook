@@ -176,9 +176,11 @@ const AdminSettings: React.FC = () => {
       
       const newItems = await parseBulkSolutions(text);
       if (newItems && newItems.length > 0) {
+        // Use numeric timestamp for IDs to match BIGINT database column
+        const timestamp = Date.now();
         const formatted: SolutionItem[] = newItems.map((item, i) => ({
           ...item,
-          id: `imp-${Date.now()}-${i}`,
+          id: timestamp + i, 
           categoria: (item.categoria as SolutionCategory) || 'Direção',
           subcategoria: (item.subcategoria as SolutionSubCategory) || 'Marca & Cultura',
           duracao: (item.duracao as SolutionDuration) || '90 dias',
@@ -202,7 +204,7 @@ const AdminSettings: React.FC = () => {
 
   const addSolution = () => {
     const newItem: SolutionItem = {
-      id: `new-${Date.now()}`,
+      id: Date.now(), // Use numeric ID to satisfy BIGINT requirement
       solucao: "Nova Solução",
       promessa: "Promessa de valor",
       categoria: "Direção",

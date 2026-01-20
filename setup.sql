@@ -58,3 +58,11 @@ SELECT 'Schema V6 (Fichário Pastas) aplicado com sucesso.' as status;
 ALTER TABLE public.solutions ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN DEFAULT false;
 
 SELECT 'Schema V7 (Catalogo Favoritos) aplicado com sucesso.' as status;
+
+-- ==============================================================================
+-- SCHEMA V8: LINK MATERIAL DE APOIO
+-- ==============================================================================
+
+ALTER TABLE public.solutions ADD COLUMN IF NOT EXISTS link TEXT;
+
+SELECT 'Schema V8 (Link Material) aplicado com sucesso.' as status;

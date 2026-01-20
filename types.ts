@@ -47,6 +47,12 @@ export interface ProposalItem {
   duration: string;
   description?: string;
   deliverables?: string[];
+  
+  // Full Technical Sheet Data
+  promessa?: string;
+  publico_alvo?: string;
+  resultado_esperado?: string;
+  diferenciais?: string[];
 }
 
 export interface StrategicMapItem {

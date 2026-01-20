@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { PlaybookModule, UserRole, SolutionItem, SolutionCategory, SolutionMaturity, ProposalItem, AppCustomization } from '../types';
 import { SupabaseService } from '../services/api';
@@ -76,7 +77,13 @@ const PlaybookEditor: React.FC<PlaybookEditorProps> = ({ module, currentRole, on
       basePrice: item.valor_base_num || 0,
       selectedOptions: [],
       totalPrice: item.valor_base_num || 0,
-      duration: item.duracao
+      duration: item.duracao,
+      description: item.descricao,
+      deliverables: item.entregaveis || [],
+      promessa: item.promessa,
+      publico_alvo: item.publico_alvo,
+      resultado_esperado: item.resultado_esperado,
+      diferenciais: item.diferenciais
     };
     const currentProposal = JSON.parse(localStorage.getItem('phant_current_proposal') || '[]');
     const nextProposal = [...currentProposal, proposalItem];
@@ -234,7 +241,7 @@ const PlaybookEditor: React.FC<PlaybookEditorProps> = ({ module, currentRole, on
       {/* MODAL SIMPLES DE FICHA TÉCNICA */}
       {selectedSolution && (
         <div className="fixed inset-0 bg-black/90 backdrop-blur-2xl z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
-           <div className="bg-white w-full max-w-2xl rounded-[60px] p-16 shadow-2xl relative animate-in zoom-in-95 duration-500">
+           <div className="bg-white w-full max-w-2xl rounded-[60px] p-16 shadow-2xl relative animate-in zoom-in-95 duration-500 overflow-y-auto max-h-[90vh] custom-scrollbar">
               <button 
                 onClick={() => setSelectedSolution(null)}
                 className="absolute top-10 right-10 w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center hover:bg-black hover:text-white transition-all"
@@ -249,11 +256,40 @@ const PlaybookEditor: React.FC<PlaybookEditorProps> = ({ module, currentRole, on
                     <p className="text-xl font-bold text-gray-400 italic">"{selectedSolution.promessa}"</p>
                  </header>
 
-                 <div className="space-y-6">
+                 <div className="space-y-8">
                     <div className="space-y-2">
                        <h4 className="text-[10px] font-black text-gray-300 uppercase tracking-widest">Descrição da Entrega</h4>
                        <p className="text-sm text-gray-600 font-medium leading-relaxed">{selectedSolution.descricao || 'Detalhes técnicos em processamento...'}</p>
                     </div>
+
+                    {selectedSolution.entregaveis && selectedSolution.entregaveis.length > 0 && (
+                        <div className="space-y-3">
+                            <h4 className="text-[10px] font-black text-gray-300 uppercase tracking-widest">Entregáveis</h4>
+                            <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                                {selectedSolution.entregaveis.map((e, idx) => (
+                                    <li key={idx} className="flex items-start gap-2 text-xs font-bold text-gray-700">
+                                        <span className="text-brand">•</span> {e}
+                                    </li>
+                                ))}
+                            </ul>
+                        </div>
+                    )}
+                    
+                    <div className="grid grid-cols-2 gap-6">
+                        {selectedSolution.resultado_esperado && (
+                            <div className="p-5 bg-gray-50 rounded-3xl">
+                                <h4 className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Resultado Esperado</h4>
+                                <p className="text-xs font-bold text-gray-800">{selectedSolution.resultado_esperado}</p>
+                            </div>
+                        )}
+                        {selectedSolution.publico_alvo && (
+                            <div className="p-5 bg-gray-50 rounded-3xl">
+                                <h4 className="text-[9px] font-black text-gray-400 uppercase tracking-widest mb-2">Público Alvo</h4>
+                                <p className="text-xs font-bold text-gray-800">{selectedSolution.publico_alvo}</p>
+                            </div>
+                        )}
+                    </div>
+
                     <div className="p-8 bg-amber-50 rounded-[32px] border border-amber-100 italic">
                        <h4 className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-3">Dica de Venda {appConfig.companyName}</h4>
                        <p className="text-sm font-bold text-amber-900/70">"{selectedSolution.dica_venda || 'Foque no ROI imediato e na liberação de tempo do empresário.'}"</p>
