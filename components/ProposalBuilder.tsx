@@ -1,9 +1,9 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { ProposalItem, StrategicMapItem, ProposalMetadata, SolutionItem, ProposalRecord, AppCustomization } from '../types';
 import { generateStrategicMapping, improveObservationText } from '../services/gemini';
 import { SupabaseService } from '../services/api';
 import ProposalPresentation from './ProposalPresentation';
-import html2pdf from 'html2pdf.js';
 
 interface ProposalBuilderProps {
   appConfig: AppCustomization;
@@ -256,14 +256,14 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
       };
 
       // 6. Safe Execution
-      // @ts-ignore
-      const pdfLib = html2pdf.default || html2pdf || (window as any).html2pdf;
+      // Get from global window object (loaded via CDN script)
+      const pdfLib = (window as any).html2pdf;
       
       if (typeof pdfLib === 'function') {
          await pdfLib().set(opt).from(clone).save();
       } else {
          console.error("HTML2PDF library not loaded correctly", pdfLib);
-         alert("Erro interno na biblioteca de PDF.");
+         alert("Erro: Biblioteca de PDF não carregou. Verifique sua conexão e recarregue a página.");
       }
 
       // 7. Cleanup
