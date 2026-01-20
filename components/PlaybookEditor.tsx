@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { PlaybookModule, UserRole, SolutionItem, SolutionCategory, SolutionMaturity, ProposalItem, AppCustomization } from '../types';
 import { SupabaseService } from '../services/api';
@@ -261,12 +260,24 @@ const PlaybookEditor: React.FC<PlaybookEditorProps> = ({ module, currentRole, on
                     </div>
                  </div>
 
-                 <button 
-                   onClick={() => { addToProposal(selectedSolution); setSelectedSolution(null); }}
-                   className="w-full py-6 bg-black text-white rounded-[30px] font-black text-xs uppercase tracking-[0.2em] shadow-2xl hover:bg-brand transition-all"
-                 >
-                   Adicionar à Proposta Atual
-                 </button>
+                 <div className="flex flex-col gap-4">
+                     {selectedSolution.link && (
+                        <a 
+                            href={selectedSolution.link} 
+                            target="_blank" 
+                            rel="noreferrer"
+                            className="w-full py-4 bg-gray-100 text-gray-900 rounded-[30px] font-black text-xs uppercase tracking-[0.2em] hover:bg-gray-200 transition-all flex items-center justify-center gap-2"
+                        >
+                            <span>📂</span> Acessar Material Completo
+                        </a>
+                     )}
+                     <button 
+                       onClick={() => { addToProposal(selectedSolution); setSelectedSolution(null); }}
+                       className="w-full py-6 bg-black text-white rounded-[30px] font-black text-xs uppercase tracking-[0.2em] shadow-2xl hover:bg-brand transition-all"
+                     >
+                       Adicionar à Proposta Atual
+                     </button>
+                 </div>
               </div>
            </div>
         </div>

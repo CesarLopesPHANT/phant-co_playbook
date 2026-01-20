@@ -1,4 +1,3 @@
-
 import { createClient } from '@supabase/supabase-js';
 import { SolutionItem, AIConfig, UserRole, ProposalRecord, ProposalItem, ProposalMetadata, AppCustomization, MonthlyGoal, AssistSession, FicharioFolder } from '../types';
 
@@ -143,7 +142,8 @@ export const SupabaseService = {
         maturidade: s.maturidade, 
         valor_base_num: s.valor_base_num, 
         variaveis_opcionais: s.variaveis_opcionais,
-        is_favorite: s.is_favorite 
+        is_favorite: s.is_favorite,
+        link: s.link 
       }));
       const { error } = await supabase.from('solutions').upsert(payload, { onConflict: 'id' });
       if (error) throw error;

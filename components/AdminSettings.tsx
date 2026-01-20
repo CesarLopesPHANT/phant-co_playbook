@@ -38,8 +38,8 @@ const AdminSettings: React.FC = () => {
 
   const [appConfig, setAppConfig] = useState<AppCustomization>({
     companyName: "PhantLab",
-    systemLogoUrl: "http://phant.com.br/uploads/simbolo_roxo.png",
-    proposalLogoUrl: "http://phant.com.br/uploads/logo_light.png",
+    systemLogoUrl: "https://phant.com.br/uploads/simbolo_roxo.png",
+    proposalLogoUrl: "https://phant.com.br/uploads/logo_light.png",
     primaryColor: "#2563eb"
   });
 
@@ -116,9 +116,9 @@ const AdminSettings: React.FC = () => {
     try {
       const result = await SupabaseService.syncSolutions(solutions);
       if (result.success) {
-        showToast("Catálogo sincronizado com a Nuvem");
+        showToast("Catálogo salvo com sucesso!");
       } else {
-        showToast("Erro na sincronia: " + result.message, "error");
+        showToast("Erro ao salvar: " + result.message, "error");
       }
     } catch (err) {
       showToast("Falha na conexão com o servidor", "error");
@@ -212,7 +212,8 @@ const AdminSettings: React.FC = () => {
       fee_mensal: "R$ 0",
       valor_base_num: 0,
       variaveis_opcionais: [],
-      dica_venda: ""
+      dica_venda: "",
+      link: ""
     };
     setSolutions([newItem, ...solutions]);
   };
@@ -408,8 +409,8 @@ const AdminSettings: React.FC = () => {
               </button>
               <input type="file" ref={fileInputRef} onChange={handleImportDocx} accept=".docx" className="hidden" />
               
-              <button onClick={handleSyncSolutions} disabled={isSyncing} className={`px-8 py-4 ${isSyncing ? 'bg-gray-400' : 'bg-brand'} text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-blue-700 transition-all whitespace-nowrap`}>
-                {isSyncing ? 'Sincronizando...' : 'Sincronizar com Nuvem'}
+              <button onClick={handleSyncSolutions} disabled={isSyncing} className={`px-8 py-4 ${isSyncing ? 'bg-gray-400' : 'bg-emerald-600'} text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-emerald-700 transition-all whitespace-nowrap`}>
+                {isSyncing ? 'Salvando...' : 'Salvar'}
               </button>
             </div>
           </div>
@@ -429,7 +430,7 @@ const AdminSettings: React.FC = () => {
                          className={`p-4 rounded-xl transition-all ${item.is_favorite ? 'bg-amber-100 text-amber-500' : 'bg-gray-50 text-gray-300 hover:bg-amber-50 hover:text-amber-400'}`}
                          title="Favoritar / Destacar no Topo"
                        >
-                          <svg className="w-5 h-5" fill={item.is_favorite ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
+                          <svg className="w-5 h-5" fill={item.is_favorite ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11.049 2.927c.3-.921 1.603-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
                        </button>
                        <input 
                          value={item.solucao} 
@@ -531,6 +532,18 @@ const AdminSettings: React.FC = () => {
                       <div className="space-y-2">
                         <label className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Dica de Venda</label>
                         <textarea value={item.dica_venda} onChange={(e) => updateSolution(item.id, 'dica_venda', e.target.value)} className="w-full bg-amber-50/30 p-4 rounded-xl font-medium italic text-sm border border-amber-100/50 min-h-[80px]" />
+                      </div>
+                      
+                      {/* LINK FIELD */}
+                      <div className="space-y-2">
+                        <label className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Link do Material (Drive/Doc)</label>
+                        <input
+                            type="text"
+                            value={item.link || ''}
+                            onChange={(e) => updateSolution(item.id, 'link', e.target.value)}
+                            placeholder="https://docs.google.com/..."
+                            className="w-full bg-gray-50 p-4 rounded-xl font-medium text-sm border border-transparent focus:bg-white focus:border-brand outline-none"
+                        />
                       </div>
                    </div>
                 </div>

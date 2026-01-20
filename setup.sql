@@ -50,3 +50,11 @@ CREATE POLICY "Public access fichario" ON public.fichario FOR ALL USING (true);
 -- A lógica principal estará no SupabaseService.syncFicharioToDb
 
 SELECT 'Schema V6 (Fichário Pastas) aplicado com sucesso.' as status;
+
+-- ==============================================================================
+-- SCHEMA V7: CATALOGO FAVORITOS
+-- ==============================================================================
+
+ALTER TABLE public.solutions ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN DEFAULT false;
+
+SELECT 'Schema V7 (Catalogo Favoritos) aplicado com sucesso.' as status;
