@@ -73,250 +73,169 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
         .presentation-bg {
           background-color: #050505;
           background-image: url("${DOT_PATTERN}");
-        }
-        .text-gradient {
-          background: linear-gradient(135deg, #fff 0%, #a855f7 100%);
-          -webkit-background-clip: text;
-          -webkit-text-fill-color: transparent;
-        }
-        .btn-presentation {
-          background: ${PHANT_PURPLE};
-          transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-        .btn-presentation:hover {
-          transform: scale(1.05);
-          box-shadow: 0 0 30px rgba(97, 19, 204, 0.4);
+          background-attachment: fixed;
         }
         section {
           min-height: 100vh;
           display: flex;
           flex-direction: column;
           justify-content: center;
-          padding: 5rem 2rem;
+          padding: 5vw;
           scroll-snap-align: start;
         }
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #000; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
       `}</style>
 
       {/* FIXED HEADER */}
-      <nav className="fixed top-0 left-0 right-0 p-8 flex justify-between items-center z-[210] pointer-events-none gap-4">
+      <nav className="fixed top-0 left-0 right-0 p-8 flex justify-between items-center z-[210] pointer-events-none gap-4 mix-blend-difference">
         <div className="pointer-events-auto">
-            {logoUrl && <img src={logoUrl} alt="Logo" className="h-8 w-auto invert brightness-200" onError={(e) => e.currentTarget.style.display = 'none'} />}
+            <button 
+                onClick={onClose}
+                className="flex items-center gap-2 text-white/50 hover:text-white transition-colors uppercase tracking-widest text-[10px] font-black"
+            >
+                ← Voltar
+            </button>
         </div>
         <div className="flex gap-4 pointer-events-auto">
           <button 
             onClick={handleShare}
-            className="px-6 py-4 bg-white/5 border border-white/10 rounded-full hover:bg-white/10 transition-all text-white font-bold text-xs uppercase tracking-widest flex items-center gap-2"
+            className="px-6 py-3 bg-white/10 border border-white/10 rounded-full hover:bg-white/20 transition-all text-white font-bold text-[10px] uppercase tracking-widest flex items-center gap-2 backdrop-blur-md"
           >
             <span>🔗</span> {proposalId ? 'Compartilhar' : 'Salvar p/ Compartilhar'}
-          </button>
-          <button 
-            onClick={onClose}
-            className="p-4 bg-white/5 border border-white/10 rounded-full hover:bg-white/10 transition-all text-white/40 hover:text-white"
-          >
-            <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12" />
-            </svg>
           </button>
         </div>
       </nav>
 
       <div className="presentation-bg">
-        {/* SLIDE 1: CAPA */}
+        {/* SLIDE 1: CAPA (Igual PDF) */}
         {sections.cover && (
-            <section id="cover" className="relative text-center overflow-hidden">
-            <div className="absolute inset-0 opacity-20 pointer-events-none">
-                <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-purple-600 rounded-full blur-[160px] animate-pulse"></div>
-            </div>
-            <div className="relative z-10 max-w-6xl mx-auto space-y-12">
-                <div className="mb-12 flex justify-center">
-                    {logoUrl && <img src={logoUrl} alt="Logo" className="h-24 md:h-32 w-auto animate-in zoom-in-50 duration-1000 invert brightness-200" onError={(e) => e.currentTarget.style.display = 'none'} />}
+            <section id="cover" className="relative">
+                <div className="w-full max-w-7xl mx-auto flex flex-col justify-between min-h-[80vh]">
+                    {/* Header */}
+                    <div className="flex justify-between items-start animate-in fade-in slide-in-from-top-4 duration-1000">
+                        {logoUrl ? 
+                            <img src={logoUrl} alt="Logo" className="h-12 object-contain invert brightness-200" onError={(e) => e.currentTarget.style.display = 'none'} /> : 
+                            <h2 className="text-3xl font-black tracking-tighter text-white">{appConfig.companyName}</h2>
+                        }
+                        <p className="text-[10px] font-bold text-gray-500 uppercase tracking-[0.2em]">{metadata.date}</p>
+                    </div>
+
+                    {/* Main Content */}
+                    <div className="space-y-10 max-w-5xl animate-in zoom-in-50 duration-1000 my-auto">
+                        <div className="w-24 h-1.5 bg-[#6113cc]"></div>
+                        <span className="block text-xs font-black uppercase tracking-[0.4em] text-[#6113cc]">Confidencial</span>
+                        <h1 className="text-7xl md:text-[8rem] font-black leading-[0.9] tracking-tighter uppercase text-white">
+                            {metadata.headline || 'Plano de Aceleração'}
+                        </h1>
+                        <p className="text-3xl font-medium text-gray-500 max-w-3xl">
+                            Estratégia exclusiva desenvolvida para <span className="text-white border-b-2 border-[#6113cc]">{metadata.clientName}</span>.
+                        </p>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="border-t border-white/10 pt-8 flex justify-between items-end animate-in fade-in slide-in-from-bottom-4 duration-1000 delay-300">
+                        <div>
+                            <p className="text-[10px] font-bold text-[#6113cc] uppercase tracking-widest mb-2">Consultor Responsável</p>
+                            <p className="text-xl font-bold text-white">{metadata.consultant}</p>
+                        </div>
+                        <div className="text-right">
+                            <p className="text-[10px] font-bold text-gray-600 uppercase tracking-widest">PhantLab Methodology</p>
+                        </div>
+                    </div>
                 </div>
-                <span className="inline-block px-6 py-2 bg-white/5 border border-white/10 rounded-full text-xs font-black uppercase tracking-[0.4em] text-white/40">
-                Proposta de Movimento Estratégico
-                </span>
-                <h1 className="text-7xl md:text-[9rem] font-black tracking-tighter leading-[0.8] uppercase italic">
-                {metadata.headline || 'Impacto & Crescimento'}
-                </h1>
-                <div className="flex flex-col items-center gap-6">
-                <div className="h-1 w-40 bg-purple-600"></div>
-                <p className="text-2xl md:text-3xl font-bold tracking-tight text-white/60">
-                    Preparado exclusivamente para <span className="text-white italic">{metadata.clientName}</span>
-                </p>
-                </div>
-            </div>
             </section>
         )}
 
-        {/* SLIDE 2: O CENÁRIO (MAPA) */}
+        {/* SLIDE 2: ANÁLISE DE CENÁRIO (Igual PDF) */}
         {sections.strategicMap && (
-            <section id="diagnosis" className="bg-[#080808]/50 backdrop-blur-sm">
-            <div className="max-w-7xl mx-auto w-full space-y-20">
-                <div className="space-y-6">
-                <h2 className="text-5xl md:text-8xl font-black tracking-tighter uppercase italic leading-none">
-                    O Diagnóstico <br/> <span className="text-purple-600">Estratégico.</span>
-                </h2>
-                <p className="text-xl text-white/40 max-w-2xl font-medium">A clareza sobre onde você está é o primeiro passo para o domínio do mercado.</p>
-                </div>
-
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-px bg-white/5 border border-white/10 rounded-[40px] overflow-hidden">
-                {strategicMap.length > 0 ? strategicMap.map((map, i) => (
-                    <div key={i} className="grid grid-cols-1 md:grid-cols-2 group">
-                        <div className="p-12 md:p-16 border-b md:border-b-0 md:border-r border-white/5 hover:bg-white/[0.02] transition-all">
-                        <span className="block text-[10px] font-black uppercase tracking-widest text-red-500 mb-6">Estado Atual (Gargalo)</span>
-                        <p className="text-lg font-medium text-white/40 italic leading-relaxed">"{map.current}"</p>
+            <section id="diagnosis" className="relative">
+                <div className="w-full max-w-7xl mx-auto flex flex-col h-full">
+                    <header className="mb-20 border-b border-white/10 pb-10 animate-in slide-in-from-left-10 duration-700">
+                        <div className="flex justify-between items-center">
+                            <h2 className="text-5xl md:text-7xl font-black tracking-tighter uppercase text-white">Análise de Cenário</h2>
+                            <span className="text-xs font-black bg-white/10 px-5 py-2 rounded-full text-white/50 uppercase">01 / Diagnóstico</span>
                         </div>
-                        <div className="p-12 md:p-16 bg-purple-600/5 group-hover:bg-purple-600/10 transition-all relative">
-                        <div className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-6 bg-purple-600 rotate-45 hidden md:block"></div>
-                        <span className="block text-[10px] font-black uppercase tracking-widest text-purple-400 mb-6">Estado Desejado (Movimento)</span>
-                        <p className="text-xl font-black text-white leading-tight uppercase">{map.desired}</p>
-                        </div>
-                    </div>
-                )) : (
-                    <div className="col-span-2 py-40 text-center text-white/20 font-black uppercase tracking-[0.5em]">Gerando análise profunda...</div>
-                )}
-                </div>
-            </div>
-            </section>
-        )}
+                    </header>
 
-        {/* SLIDE 3: O MÉTODO (3 MOVIMENTOS) */}
-        <section id="method" className="relative overflow-hidden">
-          <div className="max-w-7xl mx-auto w-full space-y-24">
-            <div className="text-center space-y-6">
-               <h2 className="text-6xl md:text-[7rem] font-black tracking-tighter uppercase italic leading-none">
-                 Os 3 Movimentos <br/> <span className="text-purple-600">da Phant.</span>
-               </h2>
-               <p className="text-xl text-white/40 max-w-2xl mx-auto font-medium">Aceleramos empresas através de um ecossistema de inteligência.</p>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
-               {[
-                 { t: 'DIREÇÃO', s: 'A Tese', c: '#00B884', d: 'Alinhamento intelectual e clareza de rumo para o decisor.' },
-                 { t: 'PROPAGAÇÃO', s: 'O Ativo', c: '#0095FF', d: 'Materialização da tese em canais e infraestrutura digital.' },
-                 { t: 'ACELERAÇÃO', s: 'A Escala', c: '#7C3AED', d: 'Execução agressiva e monetização através de tecnologia e IA.' }
-               ].map((m, i) => (
-                 <div key={i} className="p-12 bg-white/5 border border-white/10 rounded-[50px] space-y-8 group hover:border-purple-500/50 transition-all">
-                    <div className="w-20 h-20 rounded-3xl flex items-center justify-center text-white text-3xl font-black shadow-2xl group-hover:scale-110 transition-transform" style={{ backgroundColor: m.c }}>
-                      0{i+1}
-                    </div>
-                    <div className="space-y-4">
-                       <h3 className="text-3xl font-black italic tracking-tighter" style={{ color: m.c }}>{m.t}</h3>
-                       <p className="text-white/80 font-bold uppercase text-xs tracking-widest">{m.s}</p>
-                       <p className="text-white/40 leading-relaxed font-medium">{m.d}</p>
-                    </div>
-                 </div>
-               ))}
-            </div>
-          </div>
-        </section>
-
-        {/* SLIDE 4: ESCOPO TÁTICO */}
-        {sections.scope && (
-            <section id="scope" className="bg-[#0a0a0a]">
-            <div className="max-w-7xl mx-auto w-full space-y-20">
-                <div className="flex flex-col md:flex-row md:items-end justify-between gap-10">
-                    <div className="space-y-6">
-                    <h2 className="text-6xl md:text-8xl font-black tracking-tighter uppercase italic leading-none text-gradient">
-                        Nossa <br/> <span className="text-white">Entrega.</span>
-                    </h2>
-                    <p className="text-xl text-white/40 max-w-xl font-medium">Ações concretas para tirar a sua empresa da inércia.</p>
-                    </div>
-                    <div className="text-right pb-4">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-purple-400 mb-2">Projeto de Impacto</p>
-                    <p className="text-4xl font-black text-white">{items.length} Soluções Integradas</p>
-                    </div>
-                </div>
-
-                <div className="space-y-8">
-                    {items.map((item, i) => (
-                    <div key={i} className="flex flex-col md:flex-row gap-10 p-10 bg-white/[0.03] border border-white/5 rounded-[40px] hover:bg-white/[0.05] transition-all">
-                        <div className="md:w-1/3 space-y-6">
-                            <div className="space-y-4">
-                                <span className="text-[10px] font-black uppercase tracking-widest px-4 py-1 bg-purple-600 rounded-full">{item.duration}</span>
-                                <h3 className="text-3xl font-black italic tracking-tighter uppercase leading-tight">{item.name}</h3>
-                            </div>
-                            {(item.promessa) && (
-                            <p className="text-sm text-purple-200/80 italic border-l-2 border-purple-500 pl-4 font-medium">
-                                "{item.promessa}"
-                            </p>
-                            )}
-                        </div>
-
-                        <div className="md:w-2/3 grid grid-cols-1 md:grid-cols-2 gap-10 border-l border-white/10 pl-0 md:pl-10">
-                            <div className="space-y-4">
-                            <h4 className="text-[10px] font-black uppercase tracking-widest text-white/30">Descrição Técnica</h4>
-                            <p className="text-sm text-white/60 font-medium leading-relaxed whitespace-pre-wrap">{item.description || "Implementação tática para ganho de market share imediato."}</p>
-                            
-                            {item.resultado_esperado && (
-                                <div className="pt-4 mt-4 border-t border-white/5">
-                                    <span className="text-[9px] font-black text-green-400 uppercase tracking-widest block mb-1">Resultado Esperado</span>
-                                    <p className="text-xs text-white/80">{item.resultado_esperado}</p>
+                    <div className="flex-1 grid gap-8">
+                        {strategicMap.map((item, idx) => (
+                            <div key={idx} className="flex flex-col md:flex-row border border-white/10 bg-white/[0.02] hover:bg-white/[0.05] transition-colors duration-500 animate-in fade-in slide-in-from-bottom-4" style={{ animationDelay: `${idx * 150}ms` }}>
+                                <div className="flex-1 p-12 border-r border-white/10">
+                                    <span className="text-[10px] font-black text-red-500 uppercase tracking-widest mb-6 block">Estado Atual (Dor)</span>
+                                    <p className="text-3xl font-bold text-gray-500 line-through decoration-red-500/50 decoration-2">{item.current}</p>
                                 </div>
-                            )}
+                                <div className="flex-1 p-12 bg-[#6113cc]/5 relative overflow-hidden">
+                                    <div className="absolute right-0 top-0 w-32 h-32 bg-gradient-to-bl from-[#6113cc]/20 to-transparent pointer-events-none"></div>
+                                    <span className="text-[10px] font-black text-[#6113cc] uppercase tracking-widest mb-6 block">Estado Desejado (Solução)</span>
+                                    <p className="text-4xl font-black text-white">{item.desired}</p>
+                                </div>
                             </div>
-                            <div className="space-y-4">
-                            <h4 className="text-[10px] font-black uppercase tracking-widest text-white/30">Entregáveis & Escopo</h4>
-                            <ul className="space-y-2">
-                                {(item.deliverables || ['Setup Tecnológico', 'Validado em Campo', 'Relatório de ROAS']).map((d, idx) => (
-                                <li key={idx} className="flex items-start gap-3 text-xs font-bold text-white/70">
-                                    <span className="w-1.5 h-1.5 rounded-full bg-purple-500 mt-1.5 shrink-0"></span>
-                                    {d}
-                                </li>
-                                ))}
-                            </ul>
-                            </div>
-                        </div>
+                        ))}
                     </div>
-                    ))}
                 </div>
-            </div>
             </section>
         )}
 
-        {/* SLIDE 5: INVESTIMENTO & FECHAMENTO */}
+        {/* SLIDE 3: ESCOPO & ITENS (Igual PDF) */}
+        {sections.scope && (
+            <section id="scope" className="relative">
+                <div className="w-full max-w-7xl mx-auto flex flex-col h-full">
+                    <header className="mb-16 border-b border-white/10 pb-10 animate-in slide-in-from-left-10 duration-700">
+                        <div className="flex justify-between items-center">
+                            <h2 className="text-5xl md:text-7xl font-black tracking-tighter uppercase text-white">Escopo & Itens</h2>
+                            <span className="text-xs font-black bg-white/10 px-5 py-2 rounded-full text-white/50 uppercase">02 / Execução</span>
+                        </div>
+                    </header>
+
+                    <div className="flex-1 space-y-6">
+                        {items.map((item, i) => (
+                            <div key={i} className="flex flex-col md:flex-row justify-between items-center border border-white/10 p-10 bg-white/[0.02] hover:bg-white/[0.05] transition-colors duration-500 animate-in fade-in slide-in-from-bottom-4" style={{ animationDelay: `${i * 100}ms` }}>
+                                <div className="space-y-3 flex-1">
+                                    <div className="flex items-center gap-5">
+                                        <span className="text-[10px] font-black text-[#6113cc] uppercase tracking-widest bg-white/5 px-3 py-1 rounded">{item.duration}</span>
+                                        <h3 className="text-3xl font-black text-white uppercase tracking-tight">{item.name}</h3>
+                                    </div>
+                                    <p className="text-base text-gray-500 font-medium max-w-3xl leading-relaxed">{item.description}</p>
+                                </div>
+                                <div className="text-right mt-6 md:mt-0 pl-10 border-l border-white/5">
+                                    <p className="text-3xl font-bold text-white">{formatCurrency(item.totalPrice)}</p>
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            </section>
+        )}
+
+        {/* SLIDE 4: FECHAMENTO (Igual PDF) */}
         {sections.closing && (
             <section id="closing" className="relative">
-            <div className="absolute inset-0 overflow-hidden pointer-events-none">
-                <div className="absolute bottom-0 right-0 w-[600px] h-[600px] bg-purple-600 rounded-full blur-[180px] opacity-20"></div>
-            </div>
-            
-            <div className="max-w-4xl mx-auto w-full text-center space-y-20 relative z-10">
-                <div className="space-y-12">
-                    <h2 className="text-5xl md:text-8xl font-black tracking-tighter uppercase italic leading-none">
-                        O Próximo <br/> <span className="text-purple-600">Movimento.</span>
-                    </h2>
-                    <p className="text-xl text-white/60 max-w-2xl mx-auto font-medium">O custo da inércia é infinitamente superior ao investimento em clareza.</p>
-                </div>
+                <div className="w-full max-w-7xl mx-auto flex flex-col justify-center h-full">
+                    <div className="p-24 bg-white/[0.03] border border-white/10 text-center space-y-16 animate-in zoom-in-95 duration-700 backdrop-blur-sm rounded-[40px]">
+                        <div className="space-y-8">
+                            <span className="text-xs font-black uppercase tracking-[0.5em] text-[#6113cc]">Investimento Total</span>
+                            {discountAmount > 0 && <span className="block text-3xl font-bold text-gray-600 line-through decoration-gray-500">{formatCurrency(subtotal)}</span>}
+                            <h2 className="text-[7rem] md:text-[10rem] font-black tracking-tighter text-white leading-none">{formatCurrency(finalPrice)}</h2>
+                        </div>
+                        
+                        {metadata.observations && (
+                            <div className="max-w-2xl mx-auto border-t border-white/10 pt-10">
+                                <p className="text-lg text-gray-400 font-medium italic">"{metadata.observations}"</p>
+                            </div>
+                        )}
 
-                <div className="p-16 bg-white/[0.03] border-2 border-purple-600/30 rounded-[60px] space-y-12 backdrop-blur-xl">
-                    <div className="space-y-4">
-                        <span className="text-xs font-black uppercase tracking-[0.4em] text-white/40">Investimento Estratégico Total</span>
-                        {discountAmount > 0 && <div className="text-2xl font-bold tracking-tighter italic line-through text-white/30">{formatCurrency(subtotal)}</div>}
-                        <div className="text-7xl md:text-[7rem] font-black tracking-tighter italic">{formatCurrency(finalPrice)}</div>
-                        {metadata.observations && <p className="text-white/40 font-medium italic mt-6 max-w-xl mx-auto text-sm leading-relaxed">{metadata.observations}</p>}
+                        <div className="pt-16">
+                            <div className="w-80 h-px bg-white/20 mx-auto mb-6"></div>
+                            <p className="text-[10px] font-black uppercase tracking-widest text-gray-500">Assinatura do Responsável</p>
+                        </div>
                     </div>
-
-                    <div className="flex flex-col md:flex-row gap-6 justify-center">
-                        <button 
-                        onClick={() => window.print()}
-                        className="btn-presentation px-16 py-8 rounded-[30px] font-black text-sm uppercase tracking-[0.3em] shadow-2xl"
-                        >
-                        ACEITAR PROPOSTA
-                        </button>
-                        <button 
-                        onClick={onClose}
-                        className="px-16 py-8 bg-white/5 border border-white/10 rounded-[30px] font-black text-sm uppercase tracking-[0.3em] hover:bg-white/10 transition-all"
-                        >
-                        {proposalId ? 'FECHAR' : 'VOLTAR'}
-                        </button>
+                    
+                    <div className="absolute bottom-10 left-0 right-0 text-center">
+                         <p className="text-[10px] font-black text-gray-700 uppercase tracking-[0.5em]">Documento Válido por 7 dias</p>
                     </div>
                 </div>
-
-                <footer className="pt-20 space-y-8">
-                    {logoUrl && <img src={logoUrl} alt="Logo" className="h-12 mx-auto drop-shadow-lg invert brightness-200" onError={(e) => e.currentTarget.style.display = 'none'} />}
-                    <p className="text-[10px] font-black uppercase tracking-[0.5em] text-white/20 italic">© {new Date().getFullYear()} {appConfig.companyName} • EXCLUSIVE ACCESS</p>
-                </footer>
-            </div>
             </section>
         )}
       </div>

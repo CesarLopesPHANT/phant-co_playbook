@@ -26,11 +26,11 @@
             border-radius: 10px;
         }
 
-        /* CONFIGURAÇÃO DE IMPRESSÃO DE ALTA PRECISÃO */
+        /* CONFIGURAÇÃO DE IMPRESSÃO DE ALTA FIDELIDADE (PHANT DARK) */
         @media print {
             @page {
                 size: A4;
-                margin: 0 !important; /* Margem Zero para controle via CSS */
+                margin: 0 !important;
             }
             
             html, body {
@@ -38,9 +38,11 @@
                 height: 297mm;
                 margin: 0 !important;
                 padding: 0 !important;
-                background-color: white !important; /* GARANTIA DE FUNDO BRANCO */
+                background-color: #050505 !important; /* PRETO PHANT */
+                color: white !important;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
+                color-adjust: exact !important;
             }
 
             /* Oculta UI do App */
@@ -59,7 +61,8 @@
                 width: 100% !important;
                 height: auto !important;
                 overflow: visible !important;
-                background-color: white !important;
+                background-color: #050505 !important;
+                z-index: 9999;
             }
 
             .proposal-page {
@@ -70,7 +73,10 @@
                 margin: 0 !important;
                 box-shadow: none !important;
                 border: none !important;
-                background-color: white !important;
+                background-color: #050505 !important;
+                width: 210mm !important;
+                height: 297mm !important;
+                overflow: hidden !important;
             }
         }
     </style>

@@ -5,8 +5,8 @@ import { SupabaseService } from '../services/api';
 import ProposalPresentation from './ProposalPresentation';
 import { generateStrategicMapping } from '../services/gemini';
 
-// Padrão de Pontos Sutil (Cinza claro para fundo branco)
-const DOT_PATTERN = `data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23e5e7eb' fill-opacity='0.8' fill-rule='evenodd'%3E%3Ccircle cx='3' cy='3' r='1'/%3E%3C/g%3E%3C/svg%3E`;
+// Padrão de Pontos (Estética Phant Dark)
+const DOT_PATTERN = `data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%23ffffff' fill-opacity='0.05' fill-rule='evenodd'%3E%3Ccircle cx='3' cy='3' r='1'/%3E%3C/g%3E%3C/svg%3E`;
 
 interface ProposalBuilderProps {
   appConfig: AppCustomization;
@@ -255,7 +255,7 @@ export default function ProposalBuilder({ appConfig }: ProposalBuilderProps) {
     const sections = metadata.sections || { cover: true, strategicMap: true, scope: true, closing: true };
     
     return (
-      <div className="bg-gray-200 min-h-screen flex justify-center py-10 proposal-preview-wrapper">
+      <div className="bg-[#111] min-h-screen flex justify-center py-10 proposal-preview-wrapper">
         <style>
           {`
             @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
@@ -274,11 +274,11 @@ export default function ProposalBuilder({ appConfig }: ProposalBuilderProps) {
             .proposal-page {
                 width: 210mm;
                 height: 297mm;
-                background-color: white; /* PREVIEW BRANCO */
-                color: #111;
+                background-color: #050505; /* PRETO ABSOLUTO PHANT */
+                color: white;
                 position: relative;
                 overflow: hidden;
-                box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+                box-shadow: 0 4px 20px rgba(0,0,0,0.5);
                 flex-shrink: 0;
             }
           `}
@@ -295,68 +295,71 @@ export default function ProposalBuilder({ appConfig }: ProposalBuilderProps) {
 
         <div className="proposal-container font-inter">
           
-          {/* PAGE 1: CAPA PHANT LIGHT */}
+          {/* ETAPA 1: CAPA DO DOCUMENTO */}
           {sections.cover && (
-            <section className="proposal-page p-[20mm] flex flex-col justify-between relative">
-                {/* Background Pattern Light */}
-                <div className="absolute inset-0 opacity-100 pointer-events-none" style={{ backgroundImage: `url("${DOT_PATTERN}")`, backgroundSize: '20px' }}></div>
+            <section className="proposal-page p-[15mm] flex flex-col justify-between relative">
+                {/* Background Pattern */}
+                <div className="absolute inset-0 opacity-100 pointer-events-none" style={{ backgroundImage: `url("${DOT_PATTERN}")`, backgroundSize: '15px' }}></div>
                 
                 {/* Header */}
                 <div className="relative z-10 flex justify-between items-start">
                     {logoUrl ? 
-                        <img src={logoUrl} alt="Logo" className="h-10 object-contain" /> : 
-                        <h2 className="text-2xl font-black tracking-tighter text-black">{appConfig.companyName}</h2>
+                        <img src={logoUrl} alt="Logo" className="h-10 object-contain invert brightness-200" /> : 
+                        <h2 className="text-2xl font-black tracking-tighter text-white">{appConfig.companyName}</h2>
                     }
                     <div className="text-right">
-                         <p className="text-[9px] font-bold text-gray-400 uppercase tracking-[0.2em]">{metadata.date}</p>
+                         <p className="text-[9px] font-bold text-gray-500 uppercase tracking-[0.2em]">{metadata.date}</p>
                     </div>
                 </div>
 
                 {/* Main Content */}
-                <div className="relative z-10 space-y-10">
-                    <div className="w-24 h-1.5 bg-[#6113cc]"></div>
-                    <h1 className="text-[5rem] font-black leading-[0.85] tracking-tighter uppercase text-black">
-                        {metadata.headline}
+                <div className="relative z-10 space-y-8">
+                    <div className="w-20 h-1 bg-[#6113cc]"></div>
+                    <span className="text-[10px] font-black uppercase tracking-[0.4em] text-[#6113cc]">Confidencial</span>
+                    <h1 className="text-[5rem] font-black leading-[0.85] tracking-tighter uppercase text-white">
+                        {metadata.headline || 'Plano de Aceleração'}
                     </h1>
                     <p className="text-2xl font-medium text-gray-500 max-w-lg">
-                        Plano estratégico de aceleração para <span className="text-black font-bold">{metadata.clientName}</span>.
+                        Estratégia exclusiva desenvolvida para <span className="text-white">{metadata.clientName}</span>.
                     </p>
                 </div>
 
                 {/* Footer */}
-                <div className="relative z-10 border-t border-gray-100 pt-10 flex justify-between items-end">
+                <div className="relative z-10 border-t border-white/10 pt-8 flex justify-between items-end">
                     <div>
-                        <p className="text-[8px] font-bold text-[#6113cc] uppercase tracking-widest mb-2">Prepared By</p>
-                        <p className="text-sm font-bold text-black">{metadata.consultant}</p>
+                        <p className="text-[8px] font-bold text-[#6113cc] uppercase tracking-widest mb-2">Consultor Responsável</p>
+                        <p className="text-sm font-bold text-white">{metadata.consultant}</p>
                     </div>
                     <div className="text-right">
-                         <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">Confidential Document</p>
+                         <p className="text-[8px] font-bold text-gray-600 uppercase tracking-widest">PhantLab Methodology</p>
                     </div>
                 </div>
             </section>
           )}
 
-          {/* PAGE 2: DIAGNÓSTICO (BRANCO E LIMPO) */}
+          {/* ETAPA 2: ANÁLISE IA (MAPA) */}
           {sections.strategicMap && (
-            <section className="proposal-page p-[20mm] flex flex-col relative bg-white">
+            <section className="proposal-page p-[15mm] flex flex-col relative">
+                <div className="absolute inset-0 opacity-100 pointer-events-none" style={{ backgroundImage: `url("${DOT_PATTERN}")`, backgroundSize: '15px' }}></div>
                 
-                <header className="relative z-10 mb-16 border-b border-gray-100 pb-8">
+                <header className="relative z-10 mb-16 border-b border-white/10 pb-8">
                     <div className="flex justify-between items-center">
-                        <h2 className="text-4xl font-black tracking-tighter uppercase text-black">Diagnóstico</h2>
-                        <span className="text-[10px] font-black bg-gray-100 px-3 py-1 rounded-full text-gray-500 uppercase">01 / Analysis</span>
+                        <h2 className="text-4xl font-black tracking-tighter uppercase text-white">Análise de Cenário</h2>
+                        <span className="text-[10px] font-black bg-white/10 px-3 py-1 rounded-full text-white/50 uppercase">01 / Diagnóstico</span>
                     </div>
                 </header>
 
-                <div className="flex-1 relative z-10 flex flex-col justify-center gap-8">
+                <div className="flex-1 relative z-10 flex flex-col justify-center gap-6">
                     {comparisons.map((item, idx) => (
-                        <div key={idx} className="flex flex-col md:flex-row border border-gray-100 rounded-2xl overflow-hidden shadow-sm">
-                            <div className="flex-1 p-10 border-r border-gray-100 bg-gray-50/50">
-                                <span className="text-[9px] font-black text-red-500 uppercase tracking-widest mb-4 block">Cenário Atual</span>
-                                <p className="text-xl font-bold text-gray-400 line-through decoration-red-300 decoration-2">{item.current}</p>
+                        <div key={idx} className="flex flex-col md:flex-row border border-white/10 bg-white/[0.02]">
+                            <div className="flex-1 p-10 border-r border-white/10">
+                                <span className="text-[9px] font-black text-red-500 uppercase tracking-widest mb-4 block">Estado Atual (Dor)</span>
+                                <p className="text-2xl font-bold text-gray-500 line-through decoration-red-500/50 decoration-2">{item.current}</p>
                             </div>
-                            <div className="flex-1 p-10 bg-white relative">
-                                <span className="text-[9px] font-black text-[#6113cc] uppercase tracking-widest mb-4 block">Cenário Desejado</span>
-                                <p className="text-2xl font-black text-black">{item.desired}</p>
+                            <div className="flex-1 p-10 bg-[#6113cc]/5 relative overflow-hidden">
+                                <div className="absolute right-0 top-0 w-20 h-20 bg-gradient-to-bl from-[#6113cc]/20 to-transparent"></div>
+                                <span className="text-[9px] font-black text-[#6113cc] uppercase tracking-widest mb-4 block">Estado Desejado (Solução)</span>
+                                <p className="text-3xl font-black text-white">{item.desired}</p>
                             </div>
                         </div>
                     ))}
@@ -364,62 +367,67 @@ export default function ProposalBuilder({ appConfig }: ProposalBuilderProps) {
             </section>
           )}
 
-          {/* PAGE 3: ESCOPO E INVESTIMENTO (LISTA LIMPA) */}
-          <section className="proposal-page p-[20mm] flex flex-col relative bg-white">
-             
-             <div className="h-full flex flex-col justify-between relative z-10">
-                <div className="space-y-12">
-                    {sections.scope && (
-                        <>
-                            <header className="border-b border-gray-100 pb-8 flex justify-between items-end">
-                                <h2 className="text-4xl font-black tracking-tighter uppercase text-black">Escopo Tático</h2>
-                                <span className="text-[10px] font-black bg-gray-100 px-3 py-1 rounded-full text-gray-500 uppercase">02 / Execution</span>
-                            </header>
+          {/* ETAPA 3: ESCOPO & ITENS */}
+          {sections.scope && (
+            <section className="proposal-page p-[15mm] flex flex-col relative">
+                <div className="absolute inset-0 opacity-100 pointer-events-none" style={{ backgroundImage: `url("${DOT_PATTERN}")`, backgroundSize: '15px' }}></div>
 
-                            <div className="space-y-4">
-                                {items.map((item, i) => (
-                                    <div key={i} className="flex justify-between items-center border-b border-gray-100 pb-4 last:border-0">
-                                        <div className="space-y-1">
-                                            <div className="flex items-center gap-3">
-                                                <span className="text-[9px] font-black text-[#6113cc] bg-purple-50 px-2 py-0.5 rounded uppercase tracking-widest">{item.duration}</span>
-                                                <h3 className="text-xl font-bold text-black uppercase">{item.name}</h3>
-                                            </div>
-                                            <p className="text-[10px] text-gray-500 font-medium max-w-md">{item.description}</p>
-                                        </div>
-                                        <div className="text-right">
-                                            <p className="text-lg font-bold text-black">{formatCurrency(item.totalPrice)}</p>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        </>
-                    )}
-                </div>
-
-                {sections.closing && (
-                    <div className="mt-auto">
-                        <div className="bg-gray-50 p-10 rounded-[20px] border border-gray-100">
-                            <div className="flex justify-between items-end mb-8 border-b border-gray-200 pb-6">
-                                <span className="text-xs font-black uppercase tracking-[0.2em] text-gray-400">Investimento Total</span>
-                                <div className="text-right">
-                                    {discountAmount > 0 && <span className="block text-sm font-bold text-gray-400 line-through mb-1">{formatCurrency(subtotal)}</span>}
-                                    <span className="text-6xl font-black tracking-tighter text-black">{formatCurrency(finalPrice)}</span>
-                                </div>
-                            </div>
-                            
-                            {metadata.observations && (
-                                <div className="text-left">
-                                    <p className="text-[10px] text-gray-500 font-medium italic">{metadata.observations}</p>
-                                </div>
-                            )}
-                        </div>
-                        <div className="text-center mt-8">
-                             <p className="text-[8px] font-black text-[#6113cc] uppercase tracking-[0.4em]">PhantLab Methodology • Valid Until {new Date(Date.now() + 7 * 86400000).toLocaleDateString()}</p>
-                        </div>
+                <header className="relative z-10 mb-12 border-b border-white/10 pb-8">
+                    <div className="flex justify-between items-center">
+                        <h2 className="text-4xl font-black tracking-tighter uppercase text-white">Escopo & Itens</h2>
+                        <span className="text-[10px] font-black bg-white/10 px-3 py-1 rounded-full text-white/50 uppercase">02 / Execução</span>
                     </div>
-                )}
-             </div>
-          </section>
+                </header>
+
+                <div className="flex-1 relative z-10 space-y-4 overflow-hidden">
+                    {items.map((item, i) => (
+                        <div key={i} className="flex justify-between items-center border border-white/10 p-6 bg-white/[0.02]">
+                            <div className="space-y-1">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-[9px] font-black text-[#6113cc] uppercase tracking-widest bg-white/5 px-2 py-0.5 rounded">{item.duration}</span>
+                                    <h3 className="text-xl font-bold text-white uppercase">{item.name}</h3>
+                                </div>
+                                <p className="text-[10px] text-gray-500 font-medium max-w-md line-clamp-2">{item.description}</p>
+                            </div>
+                            <div className="text-right">
+                                <p className="text-lg font-bold text-white">{formatCurrency(item.totalPrice)}</p>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </section>
+          )}
+
+          {/* ETAPA 4: TOTAL & FECHAMENTO */}
+          {sections.closing && (
+            <section className="proposal-page p-[15mm] flex flex-col justify-center relative">
+                <div className="absolute inset-0 opacity-100 pointer-events-none" style={{ backgroundImage: `url("${DOT_PATTERN}")`, backgroundSize: '15px' }}></div>
+
+                <div className="relative z-10 p-16 bg-white/[0.03] border border-white/10 text-center space-y-12">
+                    <div className="space-y-6">
+                        <span className="text-[10px] font-black uppercase tracking-[0.4em] text-[#6113cc]">Investimento Total</span>
+                        {discountAmount > 0 && <span className="block text-2xl font-bold text-gray-600 line-through">{formatCurrency(subtotal)}</span>}
+                        <h2 className="text-[6rem] font-black tracking-tighter text-white leading-none">{formatCurrency(finalPrice)}</h2>
+                    </div>
+                    
+                    {metadata.observations && (
+                        <div className="max-w-xl mx-auto border-t border-white/10 pt-8">
+                            <p className="text-[11px] text-gray-400 font-medium italic">{metadata.observations}</p>
+                        </div>
+                    )}
+
+                    <div className="pt-12">
+                        <div className="w-64 h-20 border-b border-white/20 mx-auto mb-4"></div>
+                        <p className="text-[9px] font-black uppercase tracking-widest text-gray-500">Assinatura do Responsável</p>
+                    </div>
+                </div>
+                
+                <div className="absolute bottom-[15mm] left-0 right-0 text-center">
+                     <p className="text-[8px] font-black text-gray-700 uppercase tracking-[0.4em]">Documento Válido por 7 dias</p>
+                </div>
+            </section>
+          )}
+
         </div>
       </div>
     );
