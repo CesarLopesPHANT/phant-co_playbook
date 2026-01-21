@@ -8,11 +8,14 @@ interface ProposalPresentationProps {
   strategicMap: StrategicMapItem[];
   appConfig: AppCustomization;
   onClose: () => void;
+  proposalId?: string | null;
 }
 
 const PHANT_PURPLE = "#6113cc";
+// Padrão de Pontos SVG Leve
+const DOT_PATTERN = `data:image/svg+xml,%3Csvg width='20' height='20' viewBox='0 0 20 20' xmlns='http://www.w3.org/2000/svg'%3E%3Cg fill='%236113cc' fill-opacity='0.1' fill-rule='evenodd'%3E%3Ccircle cx='3' cy='3' r='1'/%3E%3C/g%3E%3C/svg%3E`;
 
-const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, items, strategicMap, appConfig, onClose }) => {
+const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, items, strategicMap, appConfig, onClose, proposalId }) => {
   const sections = metadata.sections || { cover: true, strategicMap: true, scope: true, closing: true };
 
   const calculateTotals = () => {
@@ -37,34 +40,39 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   const handleShare = async () => {
+    if (!proposalId) {
+        alert("Salve a proposta no histórico antes de compartilhar.");
+        return;
+    }
+
+    const shareUrl = `${window.location.origin}/?presentation=${proposalId}`;
+    
     const shareData = {
       title: `Proposta ${metadata.clientName} - PhantLab`,
       text: `Confira a proposta estratégica preparada para ${metadata.clientName}.`,
-      url: window.location.href
+      url: shareUrl
     };
 
     try {
       if (navigator.share) {
         await navigator.share(shareData);
       } else {
-        await navigator.clipboard.writeText(window.location.href);
-        alert('Link copiado para a área de transferência!');
+        await navigator.clipboard.writeText(shareUrl);
+        alert('Link da apresentação copiado para a área de transferência!');
       }
     } catch (err) {
       console.log('Error sharing', err);
     }
   };
 
-  const logoUrl = appConfig.proposalLogoUrl || appConfig.systemLogoUrl || "https://placehold.co/150x50/6113cc/white?text=PHANT";
+  const logoUrl = appConfig.proposalLogoUrl || appConfig.systemLogoUrl;
 
   return (
-    <div className="fixed inset-0 z-[200] bg-black text-white overflow-y-auto selection:bg-purple-500 selection:text-white font-sans scroll-smooth">
+    <div className="fixed inset-0 z-[200] bg-[#050505] text-white overflow-y-auto selection:bg-[#6113cc] selection:text-white font-sans scroll-smooth">
       <style>{`
         .presentation-bg {
           background-color: #050505;
-          background-image: 
-            radial-gradient(circle at 20% 20%, rgba(97, 19, 204, 0.05) 0%, transparent 50%),
-            radial-gradient(circle at 80% 80%, rgba(97, 19, 204, 0.05) 0%, transparent 50%);
+          background-image: url("${DOT_PATTERN}");
         }
         .text-gradient {
           background: linear-gradient(135deg, #fff 0%, #a855f7 100%);
@@ -92,14 +100,14 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
       {/* FIXED HEADER */}
       <nav className="fixed top-0 left-0 right-0 p-8 flex justify-between items-center z-[210] pointer-events-none gap-4">
         <div className="pointer-events-auto">
-            <img src={logoUrl} alt="Logo" className="h-8 w-auto opacity-50 hover:opacity-100 transition-opacity" onError={(e) => e.currentTarget.style.display = 'none'} />
+            {logoUrl && <img src={logoUrl} alt="Logo" className="h-8 w-auto invert brightness-200" onError={(e) => e.currentTarget.style.display = 'none'} />}
         </div>
         <div className="flex gap-4 pointer-events-auto">
           <button 
             onClick={handleShare}
             className="px-6 py-4 bg-white/5 border border-white/10 rounded-full hover:bg-white/10 transition-all text-white font-bold text-xs uppercase tracking-widest flex items-center gap-2"
           >
-            <span>🔗</span> Compartilhar
+            <span>🔗</span> {proposalId ? 'Compartilhar' : 'Salvar p/ Compartilhar'}
           </button>
           <button 
             onClick={onClose}
@@ -116,12 +124,12 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
         {/* SLIDE 1: CAPA */}
         {sections.cover && (
             <section id="cover" className="relative text-center overflow-hidden">
-            <div className="absolute inset-0 opacity-20">
+            <div className="absolute inset-0 opacity-20 pointer-events-none">
                 <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-purple-600 rounded-full blur-[160px] animate-pulse"></div>
             </div>
             <div className="relative z-10 max-w-6xl mx-auto space-y-12">
                 <div className="mb-12 flex justify-center">
-                <img src={logoUrl} alt="Logo" className="h-24 md:h-32 w-auto animate-in zoom-in-50 duration-1000" onError={(e) => e.currentTarget.style.display = 'none'} />
+                    {logoUrl && <img src={logoUrl} alt="Logo" className="h-24 md:h-32 w-auto animate-in zoom-in-50 duration-1000 invert brightness-200" onError={(e) => e.currentTarget.style.display = 'none'} />}
                 </div>
                 <span className="inline-block px-6 py-2 bg-white/5 border border-white/10 rounded-full text-xs font-black uppercase tracking-[0.4em] text-white/40">
                 Proposta de Movimento Estratégico
@@ -141,7 +149,7 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
 
         {/* SLIDE 2: O CENÁRIO (MAPA) */}
         {sections.strategicMap && (
-            <section id="diagnosis" className="bg-[#080808]">
+            <section id="diagnosis" className="bg-[#080808]/50 backdrop-blur-sm">
             <div className="max-w-7xl mx-auto w-full space-y-20">
                 <div className="space-y-6">
                 <h2 className="text-5xl md:text-8xl font-black tracking-tighter uppercase italic leading-none">
@@ -171,7 +179,7 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
             </section>
         )}
 
-        {/* SLIDE 3: O MÉTODO (3 MOVIMENTOS) - (SEMPRE VISÍVEL POIS É CONCEITUAL/MARCA) */}
+        {/* SLIDE 3: O MÉTODO (3 MOVIMENTOS) */}
         <section id="method" className="relative overflow-hidden">
           <div className="max-w-7xl mx-auto w-full space-y-24">
             <div className="text-center space-y-6">
@@ -202,7 +210,7 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
           </div>
         </section>
 
-        {/* SLIDE 4: ESCOPO TÁTICO (FULL TECHNICAL SHEET) */}
+        {/* SLIDE 4: ESCOPO TÁTICO */}
         {sections.scope && (
             <section id="scope" className="bg-[#0a0a0a]">
             <div className="max-w-7xl mx-auto w-full space-y-20">
@@ -231,13 +239,6 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
                             <p className="text-sm text-purple-200/80 italic border-l-2 border-purple-500 pl-4 font-medium">
                                 "{item.promessa}"
                             </p>
-                            )}
-                            {item.diferenciais && item.diferenciais.length > 0 && (
-                                <div className="flex flex-wrap gap-2">
-                                    {item.diferenciais.map((d, idx) => (
-                                        <span key={idx} className="px-3 py-1 bg-white/5 border border-white/10 rounded-lg text-[9px] font-bold text-white/60 uppercase">{d}</span>
-                                    ))}
-                                </div>
                             )}
                         </div>
 
@@ -306,13 +307,13 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
                         onClick={onClose}
                         className="px-16 py-8 bg-white/5 border border-white/10 rounded-[30px] font-black text-sm uppercase tracking-[0.3em] hover:bg-white/10 transition-all"
                         >
-                        REVISAR DADOS
+                        {proposalId ? 'FECHAR' : 'VOLTAR'}
                         </button>
                     </div>
                 </div>
 
                 <footer className="pt-20 space-y-8">
-                    <img src={logoUrl} alt="Logo" className="h-12 mx-auto drop-shadow-lg" onError={(e) => e.currentTarget.style.display = 'none'} />
+                    {logoUrl && <img src={logoUrl} alt="Logo" className="h-12 mx-auto drop-shadow-lg invert brightness-200" onError={(e) => e.currentTarget.style.display = 'none'} />}
                     <p className="text-[10px] font-black uppercase tracking-[0.5em] text-white/20 italic">© {new Date().getFullYear()} {appConfig.companyName} • EXCLUSIVE ACCESS</p>
                 </footer>
             </div>

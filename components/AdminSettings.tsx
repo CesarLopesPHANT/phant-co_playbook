@@ -164,6 +164,57 @@ const AdminSettings: React.FC = () => {
     }
   };
 
+  const handleExportCSV = () => {
+    if (solutions.length === 0) {
+      showToast("Não há soluções para exportar", "error");
+      return;
+    }
+
+    // Definição do Cabeçalho
+    const headers = [
+      "ID",
+      "Solução",
+      "Categoria",
+      "Subcategoria",
+      "Preço Base",
+      "Duração",
+      "Promessa",
+      "Link",
+      "Dica de Venda"
+    ];
+
+    // Formatação das linhas (tratamento de aspas para CSV válido)
+    const csvRows = [
+      headers.join(','),
+      ...solutions.map(row => {
+        const escape = (text: string | undefined) => `"${(text || '').toString().replace(/"/g, '""')}"`;
+        
+        return [
+          row.id,
+          escape(row.solucao),
+          escape(row.categoria),
+          escape(row.subcategoria),
+          row.valor_base_num || 0,
+          escape(row.duracao),
+          escape(row.promessa),
+          escape(row.link),
+          escape(row.dica_venda)
+        ].join(',');
+      })
+    ];
+
+    const csvString = csvRows.join('\n');
+    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.setAttribute('download', `catalogo_phantlab_${new Date().toISOString().split('T')[0]}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    showToast("Download da planilha iniciado!");
+  };
+
   const handleImportDocx = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -406,6 +457,15 @@ const AdminSettings: React.FC = () => {
             
             <div className="flex gap-4 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
               <button onClick={addSolution} className="px-6 py-4 bg-black text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:scale-105 transition-all whitespace-nowrap">+ Nova Solução</button>
+              
+              {/* EXPORT BUTTON */}
+              <button 
+                onClick={handleExportCSV} 
+                className="px-6 py-4 bg-white border border-gray-200 text-gray-900 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-green-50 hover:text-green-700 hover:border-green-200 transition-all flex items-center gap-2 whitespace-nowrap"
+              >
+                Exportar Planilha
+              </button>
+
               <button onClick={() => fileInputRef.current?.click()} disabled={isImporting} className="px-6 py-4 bg-gray-50 border border-gray-200 text-gray-900 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-gray-100 transition-all flex items-center gap-2 whitespace-nowrap">
                 {isImporting ? 'Importando...' : 'Importar DOCX'}
               </button>

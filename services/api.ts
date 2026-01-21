@@ -303,7 +303,7 @@ export const SupabaseService = {
   // ... (Proposals, etc - mantidos iguais)
   async saveProposal(clientName: string, industry: string, totalValue: number, consultant: string, items: ProposalItem[], metadata: ProposalMetadata) {
     try {
-      const { error } = await supabase.from('proposals_history').insert([{
+      const { data, error } = await supabase.from('proposals_history').insert([{
         client_name: clientName,
         industry,
         total_value: totalValue,
@@ -311,9 +311,10 @@ export const SupabaseService = {
         items,
         metadata,
         status: 'PENDING'
-      }]);
+      }]).select('id').single();
+      
       if (error) throw error;
-      return { success: true };
+      return { success: true, id: data?.id };
     } catch (err: any) { 
       return { success: false, message: err.message }; 
     }
@@ -342,6 +343,14 @@ export const SupabaseService = {
       if (error) throw error;
       return data || [];
     } catch (err) { return []; }
+  },
+  // Busca individual para apresentação pública/compartilhada
+  async fetchProposalById(id: string): Promise<ProposalRecord | null> {
+    try {
+      const { data, error } = await supabase.from('proposals_history').select('*').eq('id', id).single();
+      if (error) throw error;
+      return data;
+    } catch (err) { return null; }
   },
   
   // --- COPILOT SERVICES ---

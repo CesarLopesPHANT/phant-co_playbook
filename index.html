@@ -26,84 +26,49 @@
             border-radius: 10px;
         }
 
-        .proposal-preview-area section.printable-page {
-            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-            margin-bottom: 40px;
-            transition: transform 0.3s ease;
-        }
-
-        /* UTILITÁRIOS DE QUEBRA DE PÁGINA */
-        .html2pdf__page-break {
-            height: 0;
-            page-break-before: always;
-            margin: 0 !important;
-            padding: 0 !important;
-            display: block;
-        }
-
-        .keep-together {
-            page-break-inside: avoid;
-            break-inside: avoid;
-        }
-
-        /* PLUGIN DE IMPRESSÃO PHANT - ISOLAMENTO RADICAL */
+        /* CONFIGURAÇÃO DE IMPRESSÃO DE ALTA PRECISÃO */
         @media print {
             @page {
                 size: A4;
-                margin: 15mm; /* Margem de segurança física */
+                margin: 0 !important; /* Margem Zero para Full Bleed */
             }
             
-            html, body, #root, #root > div, main, aside, nav, footer, button, .no-print {
-                display: none !important;
-                height: auto !important;
-                overflow: visible !important;
-            }
-
-            html, body, #root, #root > div, main, 
-            .proposal-preview-area, 
-            .proposal-container,
-            .proposal-container *,
-            section.printable-page,
-            section.printable-page * {
-                display: block !important;
-                visibility: visible !important;
-                position: static !important;
-                width: auto !important;
-                height: auto !important;
+            html, body {
+                width: 210mm;
+                height: 297mm;
                 margin: 0 !important;
                 padding: 0 !important;
-                background: none !important;
-                box-shadow: none !important;
-                border: none !important;
+                background-color: #050505 !important; /* Garante fundo preto no PDF */
+                -webkit-print-color-adjust: exact !important;
+                print-color-adjust: exact !important;
+            }
+
+            /* Oculta UI do App */
+            #root > div:not(.proposal-preview-wrapper), 
+            main, aside, nav, footer, button, .no-print, .App {
+                display: none !important;
+            }
+
+            /* Força visibilidade do container da proposta */
+            #root, .proposal-preview-wrapper {
+                display: block !important;
+                visibility: visible !important;
+                position: absolute !important;
+                top: 0 !important;
+                left: 0 !important;
+                width: 100% !important;
+                height: auto !important;
                 overflow: visible !important;
             }
 
-            .proposal-container {
-                width: 100% !important;
-                transform: none !important;
-                margin: 0 auto !important;
-            }
-
-            section.printable-page {
-                display: block !important;
-                width: 100% !important;
-                height: auto !important; /* IMPORTANTE: Altura automática para fluxo */
-                min-height: auto !important;
-                padding: 0 !important;
-                page-break-after: always !important;
-                page-break-inside: avoid !important;
-                position: relative !important;
-                background-color: white !important;
-            }
-
-            section.printable-page.bg-black {
-                background-color: black !important;
-                color: white !important;
-            }
-
-            * {
+            .proposal-page {
+                break-after: page;
+                page-break-after: always;
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
+                margin: 0 !important;
+                box-shadow: none !important;
+                border: none !important;
             }
         }
     </style>
