@@ -1,3 +1,4 @@
+
 import { createClient } from '@supabase/supabase-js';
 import { SolutionItem, AIConfig, UserRole, ProposalRecord, ProposalItem, ProposalMetadata, AppCustomization, MonthlyGoal, AssistSession, FicharioFolder } from '../types';
 
@@ -320,6 +321,15 @@ export const SupabaseService = {
   async updateProposalStatus(id: string, status: 'APPROVED' | 'REJECTED') {
     try {
       const { error } = await supabase.from('proposals_history').update({ status }).eq('id', id);
+      if (error) throw error;
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, message: err.message };
+    }
+  },
+  async deleteProposal(id: string) {
+    try {
+      const { error } = await supabase.from('proposals_history').delete().eq('id', id);
       if (error) throw error;
       return { success: true };
     } catch (err: any) {

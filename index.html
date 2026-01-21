@@ -5,7 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PhantLab | Sales Interface</title>
-    <link rel="icon" type="image/png" href="https://phant.com.br/uploads/simbolo_roxo.png">
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🟣</text></svg>">
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -32,21 +32,33 @@
             transition: transform 0.3s ease;
         }
 
+        /* UTILITÁRIOS DE QUEBRA DE PÁGINA */
+        .html2pdf__page-break {
+            height: 0;
+            page-break-before: always;
+            margin: 0 !important;
+            padding: 0 !important;
+            display: block;
+        }
+
+        .keep-together {
+            page-break-inside: avoid;
+            break-inside: avoid;
+        }
+
         /* PLUGIN DE IMPRESSÃO PHANT - ISOLAMENTO RADICAL */
         @media print {
             @page {
                 size: A4;
-                margin: 0;
+                margin: 15mm; /* Margem de segurança física */
             }
             
-            /* 1. Esconde absolutamente tudo por padrão */
             html, body, #root, #root > div, main, aside, nav, footer, button, .no-print {
                 display: none !important;
                 height: auto !important;
                 overflow: visible !important;
             }
 
-            /* 2. Habilita apenas o caminho até a proposta */
             html, body, #root, #root > div, main, 
             .proposal-preview-area, 
             .proposal-container,
@@ -66,36 +78,29 @@
                 overflow: visible !important;
             }
 
-            /* 3. Força o tamanho real A4 no container da proposta */
             .proposal-container {
-                width: 210mm !important;
-                transform: none !important; /* Remove o zoom da UI */
+                width: 100% !important;
+                transform: none !important;
                 margin: 0 auto !important;
             }
 
-            /* 4. Estilização das páginas físicas */
             section.printable-page {
-                display: flex !important;
-                flex-direction: column !important;
-                width: 210mm !important;
-                height: 297mm !important;
-                padding: 20mm !important;
+                display: block !important;
+                width: 100% !important;
+                height: auto !important; /* IMPORTANTE: Altura automática para fluxo */
+                min-height: auto !important;
+                padding: 0 !important;
                 page-break-after: always !important;
                 page-break-inside: avoid !important;
                 position: relative !important;
                 background-color: white !important;
-                box-sizing: border-box !important;
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
             }
 
-            /* Especial para fundos escuros */
             section.printable-page.bg-black {
                 background-color: black !important;
                 color: white !important;
             }
 
-            /* Garante que imagens e fundos apareçam */
             * {
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;

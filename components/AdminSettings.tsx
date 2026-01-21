@@ -38,8 +38,8 @@ const AdminSettings: React.FC = () => {
 
   const [appConfig, setAppConfig] = useState<AppCustomization>({
     companyName: "PhantLab",
-    systemLogoUrl: "https://phant.com.br/uploads/simbolo_roxo.png",
-    proposalLogoUrl: "https://phant.com.br/uploads/logo_light.png",
+    systemLogoUrl: "",
+    proposalLogoUrl: "",
     primaryColor: "#2563eb"
   });
 

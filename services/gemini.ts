@@ -105,9 +105,15 @@ export const generateStrategicMapping = async (metadata: ProposalMetadata): Prom
     const ai = await getAIClient();
     const prompt = `
       Analise a empresa ${metadata.clientName} (${metadata.industry}).
-      Notas da reunião: Dores: ${metadata.meetingNotesPains}, Desejos: ${metadata.meetingNotesDesires}.
+      Website: ${metadata.website || 'Não informado'}
+      Instagram: ${metadata.instagram || 'Não informado'}
       
-      Crie um Mapeamento Estratégico de "Estado Atual" vs "Estado Desejado".
+      Notas da reunião (Dores): ${metadata.meetingNotesPains}
+      Notas da reunião (Desejos): ${metadata.meetingNotesDesires}.
+      
+      Com base nessas informações e no seu conhecimento de mercado (Google Search), crie um Mapeamento Estratégico de "Estado Atual" (Dor/Problema) vs "Estado Desejado" (Solução/Benefício).
+      Foque em problemas reais que essa empresa provavelmente enfrenta.
+      
       Retorne exatamente 4 pares de impacto em formato JSON.
     `;
 
@@ -122,8 +128,8 @@ export const generateStrategicMapping = async (metadata: ProposalMetadata): Prom
           items: {
             type: Type.OBJECT,
             properties: {
-              current: { type: Type.STRING },
-              desired: { type: Type.STRING }
+              current: { type: Type.STRING, description: "Descrição curta do problema atual" },
+              desired: { type: Type.STRING, description: "Descrição curta do estado futuro resolvido" }
             },
             required: ["current", "desired"]
           }

@@ -60,6 +60,13 @@ export interface StrategicMapItem {
   desired: string;
 }
 
+export interface ProposalSectionsVisibility {
+  cover: boolean;
+  strategicMap: boolean;
+  scope: boolean;
+  closing: boolean;
+}
+
 export interface ProposalMetadata {
   clientName: string;
   industry: string;
@@ -74,6 +81,8 @@ export interface ProposalMetadata {
   // Campos de Desconto
   discountType?: 'percent' | 'fixed';
   discountValue?: number;
+  // Configuração de Exibição
+  sections?: ProposalSectionsVisibility;
 }
 
 export interface ProposalRecord {
