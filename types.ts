@@ -47,24 +47,11 @@ export interface ProposalItem {
   duration: string;
   description?: string;
   deliverables?: string[];
-  
-  // Full Technical Sheet Data
-  promessa?: string;
-  publico_alvo?: string;
-  resultado_esperado?: string;
-  diferenciais?: string[];
 }
 
 export interface StrategicMapItem {
   current: string;
   desired: string;
-}
-
-export interface ProposalSectionsVisibility {
-  cover: boolean;
-  strategicMap: boolean;
-  scope: boolean;
-  closing: boolean;
 }
 
 export interface ProposalMetadata {
@@ -78,11 +65,6 @@ export interface ProposalMetadata {
   date: string;
   consultant: string;
   headline?: string;
-  // Campos de Desconto
-  discountType?: 'percent' | 'fixed';
-  discountValue?: number;
-  // Configuração de Exibição
-  sections?: ProposalSectionsVisibility;
 }
 
 export interface ProposalRecord {
@@ -95,6 +77,13 @@ export interface ProposalRecord {
   metadata: ProposalMetadata;
   created_at: string;
   status?: 'PENDING' | 'APPROVED' | 'REJECTED';
+}
+
+export interface ProposalSections {
+  cover: boolean;
+  strategicMap: boolean;
+  tacticalScope: boolean;
+  finalInvestment: boolean; // Utilizado para controlar a página final ou seção de investimento
 }
 
 export interface MonthlyGoal {
@@ -133,7 +122,6 @@ export interface ChatMessage {
 }
 
 export interface AIConfig {
-  apiKey?: string; // Chave API Opcional (se não estiver no ENV)
   systemInstruction: string;
   temperature: number;
   maxOutputTokens: number;

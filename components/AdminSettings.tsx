@@ -29,7 +29,6 @@ const AdminSettings: React.FC = () => {
   const [historyRealized, setHistoryRealized] = useState<Record<string, number>>({});
 
   const [aiConfig, setAiConfig] = useState<AIConfig>({
-    apiKey: "",
     systemInstruction: "",
     temperature: 0.8,
     maxOutputTokens: 6000,
@@ -38,8 +37,8 @@ const AdminSettings: React.FC = () => {
 
   const [appConfig, setAppConfig] = useState<AppCustomization>({
     companyName: "PhantLab",
-    systemLogoUrl: "",
-    proposalLogoUrl: "",
+    systemLogoUrl: "http://phant.com.br/uploads/simbolo_roxo.png",
+    proposalLogoUrl: "http://phant.com.br/uploads/logo_light.png",
     primaryColor: "#2563eb"
   });
 
@@ -78,7 +77,7 @@ const AdminSettings: React.FC = () => {
       });
 
       if (sols) setSolutions(sols);
-      if (ai) setAiConfig(prev => ({ ...prev, ...ai })); // Merge para manter defaults se necessário
+      if (ai) setAiConfig(ai);
       if (ess) setEssencia(ess);
       if (branding) setAppConfig(branding);
       setGoals(generateGoalList(loadedGoals));
@@ -116,9 +115,9 @@ const AdminSettings: React.FC = () => {
     try {
       const result = await SupabaseService.syncSolutions(solutions);
       if (result.success) {
-        showToast("Catálogo salvo com sucesso!");
+        showToast("Catálogo sincronizado com a Nuvem");
       } else {
-        showToast("Erro ao salvar: " + result.message, "error");
+        showToast("Erro na sincronia: " + result.message, "error");
       }
     } catch (err) {
       showToast("Falha na conexão com o servidor", "error");
@@ -164,57 +163,6 @@ const AdminSettings: React.FC = () => {
     }
   };
 
-  const handleExportCSV = () => {
-    if (solutions.length === 0) {
-      showToast("Não há soluções para exportar", "error");
-      return;
-    }
-
-    // Definição do Cabeçalho
-    const headers = [
-      "ID",
-      "Solução",
-      "Categoria",
-      "Subcategoria",
-      "Preço Base",
-      "Duração",
-      "Promessa",
-      "Link",
-      "Dica de Venda"
-    ];
-
-    // Formatação das linhas (tratamento de aspas para CSV válido)
-    const csvRows = [
-      headers.join(','),
-      ...solutions.map(row => {
-        const escape = (text: string | undefined) => `"${(text || '').toString().replace(/"/g, '""')}"`;
-        
-        return [
-          row.id,
-          escape(row.solucao),
-          escape(row.categoria),
-          escape(row.subcategoria),
-          row.valor_base_num || 0,
-          escape(row.duracao),
-          escape(row.promessa),
-          escape(row.link),
-          escape(row.dica_venda)
-        ].join(',');
-      })
-    ];
-
-    const csvString = csvRows.join('\n');
-    const blob = new Blob([csvString], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.setAttribute('download', `catalogo_phantlab_${new Date().toISOString().split('T')[0]}.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-    showToast("Download da planilha iniciado!");
-  };
-
   const handleImportDocx = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -227,11 +175,9 @@ const AdminSettings: React.FC = () => {
       
       const newItems = await parseBulkSolutions(text);
       if (newItems && newItems.length > 0) {
-        // Use numeric timestamp for IDs to match BIGINT database column
-        const timestamp = Date.now();
         const formatted: SolutionItem[] = newItems.map((item, i) => ({
           ...item,
-          id: timestamp + i, 
+          id: `imp-${Date.now()}-${i}`,
           categoria: (item.categoria as SolutionCategory) || 'Direção',
           subcategoria: (item.subcategoria as SolutionSubCategory) || 'Marca & Cultura',
           duracao: (item.duracao as SolutionDuration) || '90 dias',
@@ -255,7 +201,7 @@ const AdminSettings: React.FC = () => {
 
   const addSolution = () => {
     const newItem: SolutionItem = {
-      id: Date.now(), // Use numeric ID to satisfy BIGINT requirement
+      id: `new-${Date.now()}`,
       solucao: "Nova Solução",
       promessa: "Promessa de valor",
       categoria: "Direção",
@@ -265,8 +211,7 @@ const AdminSettings: React.FC = () => {
       fee_mensal: "R$ 0",
       valor_base_num: 0,
       variaveis_opcionais: [],
-      dica_venda: "",
-      link: ""
+      dica_venda: ""
     };
     setSolutions([newItem, ...solutions]);
   };
@@ -457,22 +402,13 @@ const AdminSettings: React.FC = () => {
             
             <div className="flex gap-4 w-full md:w-auto overflow-x-auto pb-2 md:pb-0">
               <button onClick={addSolution} className="px-6 py-4 bg-black text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:scale-105 transition-all whitespace-nowrap">+ Nova Solução</button>
-              
-              {/* EXPORT BUTTON */}
-              <button 
-                onClick={handleExportCSV} 
-                className="px-6 py-4 bg-white border border-gray-200 text-gray-900 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-green-50 hover:text-green-700 hover:border-green-200 transition-all flex items-center gap-2 whitespace-nowrap"
-              >
-                Exportar Planilha
-              </button>
-
               <button onClick={() => fileInputRef.current?.click()} disabled={isImporting} className="px-6 py-4 bg-gray-50 border border-gray-200 text-gray-900 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-gray-100 transition-all flex items-center gap-2 whitespace-nowrap">
                 {isImporting ? 'Importando...' : 'Importar DOCX'}
               </button>
               <input type="file" ref={fileInputRef} onChange={handleImportDocx} accept=".docx" className="hidden" />
               
-              <button onClick={handleSyncSolutions} disabled={isSyncing} className={`px-8 py-4 ${isSyncing ? 'bg-gray-400' : 'bg-emerald-600'} text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-emerald-700 transition-all whitespace-nowrap`}>
-                {isSyncing ? 'Salvando...' : 'Salvar'}
+              <button onClick={handleSyncSolutions} disabled={isSyncing} className={`px-8 py-4 ${isSyncing ? 'bg-gray-400' : 'bg-brand'} text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-blue-700 transition-all whitespace-nowrap`}>
+                {isSyncing ? 'Sincronizando...' : 'Sincronizar com Nuvem'}
               </button>
             </div>
           </div>
@@ -492,7 +428,7 @@ const AdminSettings: React.FC = () => {
                          className={`p-4 rounded-xl transition-all ${item.is_favorite ? 'bg-amber-100 text-amber-500' : 'bg-gray-50 text-gray-300 hover:bg-amber-50 hover:text-amber-400'}`}
                          title="Favoritar / Destacar no Topo"
                        >
-                          <svg className="w-5 h-5" fill={item.is_favorite ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11.049 2.927c.3-.921 1.603-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
+                          <svg className="w-5 h-5" fill={item.is_favorite ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
                        </button>
                        <input 
                          value={item.solucao} 
@@ -594,18 +530,6 @@ const AdminSettings: React.FC = () => {
                       <div className="space-y-2">
                         <label className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Dica de Venda</label>
                         <textarea value={item.dica_venda} onChange={(e) => updateSolution(item.id, 'dica_venda', e.target.value)} className="w-full bg-amber-50/30 p-4 rounded-xl font-medium italic text-sm border border-amber-100/50 min-h-[80px]" />
-                      </div>
-                      
-                      {/* LINK FIELD */}
-                      <div className="space-y-2">
-                        <label className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Link do Material (Drive/Doc)</label>
-                        <input
-                            type="text"
-                            value={item.link || ''}
-                            onChange={(e) => updateSolution(item.id, 'link', e.target.value)}
-                            placeholder="https://docs.google.com/..."
-                            className="w-full bg-gray-50 p-4 rounded-xl font-medium text-sm border border-transparent focus:bg-white focus:border-brand outline-none"
-                        />
                       </div>
                    </div>
                 </div>
@@ -852,31 +776,6 @@ const AdminSettings: React.FC = () => {
               </div>
 
               <div className="space-y-6">
-                
-                {/* NEW API KEY INPUT */}
-                <div className="p-6 bg-blue-50 border border-blue-100 rounded-2xl space-y-4">
-                    <div className="flex justify-between items-center">
-                       <label className="text-[10px] font-black text-blue-600 uppercase tracking-widest flex items-center gap-2">
-                          Google Gemini API Key
-                          <span className="text-xs">🔑</span>
-                       </label>
-                       <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noreferrer" className="text-[9px] font-bold text-blue-400 hover:text-blue-600 uppercase tracking-widest underline">
-                          Obter Chave no AI Studio
-                       </a>
-                    </div>
-                    <input 
-                      type="password" 
-                      value={aiConfig.apiKey || ''} 
-                      onChange={e => setAiConfig({...aiConfig, apiKey: e.target.value})}
-                      className="w-full bg-white p-4 rounded-xl font-mono text-sm border border-blue-200 focus:ring-2 focus:ring-blue-500 outline-none"
-                      placeholder="AIzaSy..."
-                    />
-                    <p className="text-[9px] text-blue-400 font-medium leading-relaxed">
-                       Esta chave será usada para todas as funcionalidades de IA (Mentor, Melhoria de Texto, Copiloto). 
-                       Se deixada em branco, o sistema tentará usar a chave de ambiente do servidor (se configurada).
-                    </p>
-                </div>
-
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">System Instruction (O Cérebro do Mentor)</label>
                   <textarea 

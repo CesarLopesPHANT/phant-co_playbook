@@ -5,9 +5,8 @@ import PlaybookEditor from './components/PlaybookEditor';
 import AIAssistant from './components/AIAssistant';
 import PrivacyPolicy from './components/PrivacyPolicy';
 import TermsOfService from './components/TermsOfService';
-import ProposalPresentation from './components/ProposalPresentation';
 import { PLAYBOOK_STRUCTURE } from './constants';
-import { UserRole, AppCustomization, ProposalRecord } from './types';
+import { UserRole, AppCustomization } from './types';
 import { AuthService, supabase, getAppOrigin, SupabaseService } from './services/api';
 
 const App: React.FC = () => {
@@ -18,14 +17,10 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [appConfig, setAppConfig] = useState<AppCustomization>({
     companyName: 'PhantLab',
-    systemLogoUrl: '',
-    proposalLogoUrl: '',
+    systemLogoUrl: 'http://phant.com.br/uploads/simbolo_roxo.png',
+    proposalLogoUrl: 'http://phant.com.br/uploads/logo_light.png',
     primaryColor: '#2563eb'
   });
-  
-  // Public Presentation State
-  const [publicProposal, setPublicProposal] = useState<ProposalRecord | null>(null);
-  const [isPublicLoading, setIsPublicLoading] = useState(false);
   
   const [authView, setAuthView] = useState<'options' | 'email-login' | 'email-signup'>('options');
   const [legalView, setLegalView] = useState<'privacy' | 'terms' | null>(null);
@@ -40,19 +35,9 @@ const App: React.FC = () => {
   const profileTimeoutRef = useRef<any>(null);
 
   useEffect(() => {
-    const handleRouting = async () => {
+    const handleRouting = () => {
       const params = new URLSearchParams(window.location.search);
       const page = params.get('page');
-      const presentationId = params.get('presentation');
-
-      if (presentationId) {
-        setIsPublicLoading(true);
-        const proposal = await SupabaseService.fetchProposalById(presentationId);
-        setPublicProposal(proposal);
-        setIsPublicLoading(false);
-        return; // Stop other routing checks
-      }
-
       if (page === 'privacy') setLegalView('privacy');
       else if (page === 'terms') setLegalView('terms');
       else setLegalView(null);
@@ -181,37 +166,6 @@ FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
     alert("SQL copiado! Cole e execute no 'SQL Editor' do Supabase.");
   };
 
-  // --- RENDER: PUBLIC PRESENTATION ---
-  if (isPublicLoading) {
-    return (
-      <div className="h-screen w-full flex flex-col items-center justify-center bg-black text-white p-8">
-        <div className="w-16 h-16 border-4 border-purple-600 border-t-transparent rounded-full animate-spin mb-8"></div>
-        <p className="text-[10px] font-black uppercase tracking-[0.3em] text-white/50">Carregando Apresentação...</p>
-      </div>
-    );
-  }
-
-  if (publicProposal) {
-    // Parse strategic map correctly from metadata or legacy field
-    const strategicMap = (publicProposal.metadata as any).strategicMap || [];
-    
-    return (
-      <ProposalPresentation 
-        metadata={publicProposal.metadata}
-        items={publicProposal.items || []}
-        strategicMap={strategicMap}
-        appConfig={appConfig}
-        proposalId={publicProposal.id}
-        onClose={() => {
-           // Clear param and reload to go to home/login
-           window.history.pushState({}, '', window.location.pathname);
-           window.location.reload();
-        }}
-      />
-    );
-  }
-
-  // --- RENDER: LOADING APP ---
   if (loading && session && !userProfile) {
     return (
       <div className="h-screen w-full flex flex-col items-center justify-center bg-gray-50 p-8">
@@ -236,7 +190,6 @@ FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
 
   if (loading) return null;
 
-  // --- RENDER: AUTH / LEGAL ---
   if (!session) {
     if (legalView === 'privacy') {
         return (

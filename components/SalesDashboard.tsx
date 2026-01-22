@@ -233,12 +233,11 @@ const SalesDashboard: React.FC = () => {
                 )}
              </div>
 
-             {/* CHART FIX: Explicit height container to prevent Recharts width(0) loop */}
-             <div className="mt-4 w-full opacity-50 relative overflow-hidden" style={{ height: '6rem' }}>
-                <ResponsiveContainer width="99%" height="100%">
+             <div className="h-24 mt-4 w-full opacity-50">
+                <ResponsiveContainer width="100%" height="100%" minHeight={80}>
                   <AreaChart data={SALES_PERFORMANCE}>
                     <Area type="monotone" dataKey="leads" stroke="#2563eb" strokeWidth={3} fill="#2563eb" fillOpacity={0.05} />
-                    <Tooltip wrapperStyle={{ outline: 'none' }} contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }} cursor={false} />
+                    <Tooltip hide />
                   </AreaChart>
                 </ResponsiveContainer>
              </div>

@@ -143,8 +143,7 @@ export const SupabaseService = {
         maturidade: s.maturidade, 
         valor_base_num: s.valor_base_num, 
         variaveis_opcionais: s.variaveis_opcionais,
-        is_favorite: s.is_favorite,
-        link: s.link 
+        is_favorite: s.is_favorite 
       }));
       const { error } = await supabase.from('solutions').upsert(payload, { onConflict: 'id' });
       if (error) throw error;
@@ -303,7 +302,7 @@ export const SupabaseService = {
   // ... (Proposals, etc - mantidos iguais)
   async saveProposal(clientName: string, industry: string, totalValue: number, consultant: string, items: ProposalItem[], metadata: ProposalMetadata) {
     try {
-      const { data, error } = await supabase.from('proposals_history').insert([{
+      const { error } = await supabase.from('proposals_history').insert([{
         client_name: clientName,
         industry,
         total_value: totalValue,
@@ -311,10 +310,9 @@ export const SupabaseService = {
         items,
         metadata,
         status: 'PENDING'
-      }]).select('id').single();
-      
+      }]);
       if (error) throw error;
-      return { success: true, id: data?.id };
+      return { success: true };
     } catch (err: any) { 
       return { success: false, message: err.message }; 
     }
@@ -328,29 +326,12 @@ export const SupabaseService = {
       return { success: false, message: err.message };
     }
   },
-  async deleteProposal(id: string) {
-    try {
-      const { error } = await supabase.from('proposals_history').delete().eq('id', id);
-      if (error) throw error;
-      return { success: true };
-    } catch (err: any) {
-      return { success: false, message: err.message };
-    }
-  },
   async fetchProposalsHistory(): Promise<ProposalRecord[]> {
     try {
       const { data, error } = await supabase.from('proposals_history').select('*').order('created_at', { ascending: false });
       if (error) throw error;
       return data || [];
     } catch (err) { return []; }
-  },
-  // Busca individual para apresentação pública/compartilhada
-  async fetchProposalById(id: string): Promise<ProposalRecord | null> {
-    try {
-      const { data, error } = await supabase.from('proposals_history').select('*').eq('id', id).single();
-      if (error) throw error;
-      return data;
-    } catch (err) { return null; }
   },
   
   // --- COPILOT SERVICES ---

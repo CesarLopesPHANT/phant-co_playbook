@@ -103,7 +103,7 @@ export const PLAYBOOK_STRUCTURE: PlaybookModule[] = [
   {
     id: 'pdf_builder',
     category: 'PRODUTIZACAO',
-    title: 'Gerador de PDF',
+    title: 'Gerar Propostas',
     description: 'Crie propostas executivas de alto impacto visual.',
     status: 'ATIVA',
     version: '1.0',
