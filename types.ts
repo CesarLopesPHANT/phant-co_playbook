@@ -86,6 +86,7 @@ export interface ProposalSections {
   strategicMap: boolean;
   tacticalScope: boolean;
   finalInvestment: boolean; // Utilizado para controlar a página final ou seção de investimento
+  backCover: boolean; // Nova seção de encerramento/contato
 }
 
 export interface MonthlyGoal {

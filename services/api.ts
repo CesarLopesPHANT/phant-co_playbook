@@ -4,11 +4,16 @@ import { SolutionItem, AIConfig, UserRole, ProposalRecord, ProposalItem, Proposa
 
 const SUPABASE_URL = 'https://wdatcopytwgykhpqshxa.supabase.co';
 
-// Safely access process.env
-const getEnvVar = (key: string) => {
+// Acesso seguro a variáveis de ambiente definido no vite.config.ts
+const getEnvVar = (key: string): string | undefined => {
   try {
+    // No Vite, as variáveis definidas em 'define' são substituídas como literais
+    if (key === 'API_KEY') return process.env.API_KEY;
+    if (key === 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY') return process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
+    
+    // Fallback para process.env se disponível
     if (typeof process !== 'undefined' && process.env) {
-      return process.env[key];
+      return (process.env as any)[key];
     }
   } catch (e) {
     // ignore error
@@ -45,7 +50,6 @@ export const AuthService = {
       provider: 'google',
       options: {
         redirectTo,
-        // UPDATED SCOPE: 'drive.readonly' permite ler pastas compartilhadas que não foram criadas pelo App.
         scopes: 'openid email profile https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/drive.readonly',
         queryParams: { access_type: 'offline', prompt: 'consent' },
       }
@@ -88,7 +92,7 @@ export const AuthService = {
 export const GoogleApiService = {
   async getAccessToken() {
     const { data: { session } } = await supabase.auth.getSession();
-    return session?.provider_token;
+    return (session as any)?.provider_token;
   },
   async fetchCalendarEvents() {
     const token = await this.getAccessToken();
@@ -116,7 +120,6 @@ export const GoogleApiService = {
 };
 
 export const SupabaseService = {
-  // ... (Solutions, Configs, etc - mantidos iguais)
   async fetchSolutions(): Promise<SolutionItem[]> {
     try {
       const { data, error } = await supabase.from('solutions').select('*').order('id', { ascending: true });
@@ -237,7 +240,6 @@ export const SupabaseService = {
       return { success: false, message: err.message };
     }
   },
-  // --- FICHARIO INTELIGENTE ---
   
   async fetchFicharioFolders(): Promise<FicharioFolder[]> {
     try {
@@ -264,20 +266,16 @@ export const SupabaseService = {
   async syncFicharioToDb(files: any[]) {
     if (files.length === 0) return;
     try {
-      // 1. Carregar pastas para mapeamento
       const folders = await this.fetchFicharioFolders();
       
-      // 2. Preparar payload com categorização automática
       const payload = files.map(file => {
         let categoryId = 'others';
         const type = file.type || 'unknown';
         const nameLower = file.name.toLowerCase();
 
-        // Regra especial para Scripts (baseado no nome)
         if (nameLower.includes('script') || nameLower.includes('roteiro') || nameLower.includes('copiloto')) {
             categoryId = 'scripts';
         } else {
-            // Regra baseada nos tipos definidos na tabela fichario_folders
             const match = folders.find(f => f.file_types?.includes(type));
             if (match) categoryId = match.id;
         }
@@ -299,7 +297,6 @@ export const SupabaseService = {
     } catch (err: any) { console.error('Erro na sincronia do fichário:', err.message); }
   },
 
-  // ... (Proposals, etc - mantidos iguais)
   async saveProposal(clientName: string, industry: string, totalValue: number, consultant: string, items: ProposalItem[], metadata: ProposalMetadata) {
     try {
       const { error } = await supabase.from('proposals_history').insert([{
@@ -334,8 +331,6 @@ export const SupabaseService = {
     } catch (err) { return []; }
   },
   
-  // --- COPILOT SERVICES ---
-  
   async createAssistSession(clientName: string, scriptId: string, version: string): Promise<AssistSession | null> {
     try {
       const { data: { user } } = await supabase.auth.getUser();
@@ -356,7 +351,6 @@ export const SupabaseService = {
       return data;
     } catch (err: any) { 
       console.error("createAssistSession falhou:", err);
-      // Re-throw para o CopilotService tratar e exibir o alert correto
       throw new Error(err.message || "Erro desconhecido ao criar sessão"); 
     }
   },
@@ -412,12 +406,10 @@ export const StorageService = {
     let files: any[] = [];
     let success = false;
     
-    // 1. Tentar via API Oficial (Recomendado)
     try {
       const token = await GoogleApiService.getAccessToken();
       if (token) {
         const query = encodeURIComponent(`'${folderId}' in parents and trashed = false`);
-        // Includes iconLink and sorts by folders first
         const fields = encodeURIComponent("files(id, name, mimeType, size, modifiedTime, thumbnailLink, webViewLink, iconLink)");
         const url = `https://www.googleapis.com/drive/v3/files?q=${query}&fields=${fields}&pageSize=200&orderBy=folder,name`;
         
@@ -437,7 +429,6 @@ export const StorageService = {
       console.warn("Google API Direct Fetch failed, trying fallback...", e);
     }
 
-    // 2. Fallback para Proxy Script (Apenas se API falhar)
     if (!success) {
       const finalUrl = `${PROXY_URL}?id=${folderId}&_t=${Date.now()}`;
       try {
@@ -461,7 +452,6 @@ export const StorageService = {
     return files.map((file: any) => {
       const fileId = file.id || file.fileId;
       const modTime = file.modifiedTime || null;
-      // Prefer API provided thumbnail if available
       const thumb = file.thumbnailLink || `https://drive.google.com/thumbnail?id=${fileId}&sz=w400`;
       
       return { 

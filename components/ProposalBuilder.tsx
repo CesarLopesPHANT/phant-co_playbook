@@ -30,7 +30,8 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
     cover: true,
     strategicMap: true,
     tacticalScope: true,
-    finalInvestment: true
+    finalInvestment: true,
+    backCover: true
   });
   
   const [metadata, setMetadata] = useState<ProposalMetadata>({
@@ -408,6 +409,7 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
                         <SectionToggle label="2. Mapa" checked={selectedSections.strategicMap} onChange={v => setSelectedSections(p => ({...p, strategicMap: v}))} />
                         <SectionToggle label="3. Escopo" checked={selectedSections.tacticalScope} onChange={v => setSelectedSections(p => ({...p, tacticalScope: v}))} />
                         <SectionToggle label="4. Resumo" checked={selectedSections.finalInvestment} onChange={v => setSelectedSections(p => ({...p, finalInvestment: v}))} />
+                        <SectionToggle label="5. Contra-Capa" checked={selectedSections.backCover} onChange={v => setSelectedSections(p => ({...p, backCover: v}))} />
                      </div>
                   </div>
 
@@ -864,6 +866,53 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
                         )}
                       </div>
                   </footer>
+                </section>
+              )}
+
+              {/* PÁGINA FINAL: CONTRA-CAPA (CULTURA & CONTATO) */}
+              {selectedSections.backCover && (
+                <section className="printable-page w-[210mm] min-h-[297mm] bg-black text-white p-24 flex flex-col justify-between relative shadow-2xl shrink-0 mb-12 print:mb-0 print:shadow-none animate-in zoom-in-95 duration-500 print-break-after">
+                  <PhantPattern />
+                  
+                  <div className="relative z-10 w-full h-full flex flex-col justify-between">
+                     {/* TOPO: LOGO */}
+                     <div className="w-48 h-auto overflow-hidden">
+                        {appConfig.proposalLogoUrl ? (
+                          <img src={appConfig.proposalLogoUrl} alt="Logo" className="w-full h-auto object-contain" />
+                        ) : (
+                          <span className="text-white text-4xl">{appConfig.companyName}</span>
+                        )}
+                     </div>
+
+                     {/* MEIO: CULTURA / FRASE IMPACTO */}
+                     <div className="space-y-8">
+                        <div className="space-y-2">
+                            <p className="text-[10px] font-black uppercase tracking-[0.5em] text-white/40">Fundamento</p>
+                            <h2 className="text-7xl font-black tracking-tighter leading-[0.9] uppercase">
+                              Crescimento<br/>é Movimento<br/><span className="text-brand">Estratégico.</span>
+                            </h2>
+                        </div>
+                        <p className="text-lg text-white/60 font-medium max-w-md leading-relaxed italic border-l-2 border-brand pl-6">
+                           "Não somos agência. Somos uma plataforma estruturada por método, produtos e inteligência aplicada para diagnosticar estagnação e provocar movimento."
+                        </p>
+                     </div>
+
+                     {/* RODAPÉ: CONTATO */}
+                     <div className="border-t border-white/20 pt-12 flex justify-between items-end">
+                        <div className="space-y-4">
+                           <p className="text-[10px] font-black uppercase tracking-[0.5em] text-white/40">Contato Direto</p>
+                           <div className="space-y-1">
+                              <p className="text-2xl font-black tracking-tighter">66 9 9900 0523</p>
+                              <p className="text-lg font-medium text-white/60">www.phant.com.br</p>
+                           </div>
+                        </div>
+                        
+                        <div className="text-right opacity-30">
+                           <p className="text-[9px] font-black uppercase tracking-widest">{appConfig.companyName} HQ</p>
+                           <p className="text-[9px] uppercase">All Rights Reserved © {new Date().getFullYear()}</p>
+                        </div>
+                     </div>
+                  </div>
                 </section>
               )}
             </div>
