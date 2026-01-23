@@ -65,8 +65,6 @@ export interface ProposalMetadata {
   date: string;
   consultant: string;
   headline?: string;
-  discountType?: 'fixed' | 'percentage';
-  discountValue?: number;
 }
 
 export interface ProposalRecord {
@@ -86,7 +84,6 @@ export interface ProposalSections {
   strategicMap: boolean;
   tacticalScope: boolean;
   finalInvestment: boolean; // Utilizado para controlar a página final ou seção de investimento
-  backCover: boolean; // Nova seção de encerramento/contato
 }
 
 export interface MonthlyGoal {

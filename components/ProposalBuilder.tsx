@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef, useMemo } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { ProposalItem, StrategicMapItem, ProposalMetadata, SolutionItem, ProposalRecord, AppCustomization, ProposalSections } from '../types';
 import { generateStrategicMapping, improveObservationText } from '../services/gemini';
 import { SupabaseService } from '../services/api';
@@ -30,8 +30,7 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
     cover: true,
     strategicMap: true,
     tacticalScope: true,
-    finalInvestment: true,
-    backCover: true
+    finalInvestment: true
   });
   
   const [metadata, setMetadata] = useState<ProposalMetadata>({
@@ -44,9 +43,7 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
     observations: '',
     date: new Date().toLocaleDateString('pt-BR'),
     consultant: 'Estrategista PhantLab',
-    headline: 'PROPOSTA DE MOVIMENTO ESTRATÉGICO',
-    discountType: 'fixed',
-    discountValue: 0
+    headline: 'PROPOSTA DE MOVIMENTO ESTRATÉGICO'
   });
   
   // UI States
@@ -87,19 +84,7 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
     setProposalHistory(history || []);
   };
 
-  // --- CALCULATION LOGIC ---
-  const subTotal = useMemo(() => proposalItems.reduce((acc, curr) => acc + curr.totalPrice, 0), [proposalItems]);
-  
-  const discountAmount = useMemo(() => {
-    if (!metadata.discountValue || metadata.discountValue <= 0) return 0;
-    if (metadata.discountType === 'percentage') {
-      return subTotal * (metadata.discountValue / 100);
-    }
-    return metadata.discountValue;
-  }, [subTotal, metadata.discountValue, metadata.discountType]);
-
-  const finalTotal = Math.max(0, subTotal - discountAmount);
-
+  const total = proposalItems.reduce((acc, curr) => acc + curr.totalPrice, 0);
   const formatCurrency = (val: number) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
@@ -183,7 +168,7 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
       const res = await SupabaseService.saveProposal(
         metadata.clientName,
         metadata.industry || "N/A",
-        finalTotal,
+        total,
         metadata.consultant,
         proposalItems,
         metadata
@@ -320,9 +305,7 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
       observations: record.metadata?.observations || '',
       date: record.metadata?.date || new Date(record.created_at).toLocaleDateString('pt-BR'),
       consultant: record.consultant || 'Estrategista PhantLab',
-      headline: record.metadata?.headline || 'PROPOSTA DE MOVIMENTO ESTRATÉGICO',
-      discountType: record.metadata?.discountType || 'fixed',
-      discountValue: record.metadata?.discountValue || 0
+      headline: record.metadata?.headline || 'PROPOSTA DE MOVIMENTO ESTRATÉGICO'
     });
     setActiveTab('solutions');
     const scrollArea = document.querySelector('.proposal-preview-area');
@@ -409,7 +392,6 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
                         <SectionToggle label="2. Mapa" checked={selectedSections.strategicMap} onChange={v => setSelectedSections(p => ({...p, strategicMap: v}))} />
                         <SectionToggle label="3. Escopo" checked={selectedSections.tacticalScope} onChange={v => setSelectedSections(p => ({...p, tacticalScope: v}))} />
                         <SectionToggle label="4. Resumo" checked={selectedSections.finalInvestment} onChange={v => setSelectedSections(p => ({...p, finalInvestment: v}))} />
-                        <SectionToggle label="5. Contra-Capa" checked={selectedSections.backCover} onChange={v => setSelectedSections(p => ({...p, backCover: v}))} />
                      </div>
                   </div>
 
@@ -572,7 +554,7 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
             </div>
 
             <div className="p-8 bg-black text-white space-y-4 no-print">
-              <div className="space-y-4">
+              <div className="space-y-2">
                  <div className="flex justify-between items-center">
                     <label className="text-[9px] font-black text-white/40 uppercase tracking-widest">Observações extras</label>
                     <button onClick={handleImproveText} className="text-[8px] font-black text-brand uppercase tracking-widest">✨ Refinar Texto</button>
@@ -583,43 +565,11 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
                   className="w-full bg-white/5 border border-white/10 p-4 rounded-xl text-[10px] font-medium text-white/80 min-h-[60px] outline-none focus:bg-white/10"
                   placeholder="Acordos de pagamento..."
                  />
-                 
-                 {/* DISCOUNT CONTROL */}
-                 <div className="space-y-2 pt-2 border-t border-white/10">
-                    <label className="text-[9px] font-black text-white/40 uppercase tracking-widest">Desconto / Negociação</label>
-                    <div className="flex gap-2">
-                        <input
-                            type="number"
-                            min="0"
-                            value={metadata.discountValue || ''}
-                            onChange={(e) => setMetadata({...metadata, discountValue: parseFloat(e.target.value) || 0})}
-                            placeholder="Valor"
-                            className="w-full bg-white/5 border border-white/10 p-3 rounded-xl text-[11px] font-bold text-white outline-none focus:border-brand"
-                        />
-                        <div className="flex bg-white/5 rounded-xl border border-white/10 p-1 shrink-0">
-                            <button 
-                                onClick={() => setMetadata({...metadata, discountType: 'fixed'})}
-                                className={`px-3 rounded-lg text-[10px] font-black transition-all ${metadata.discountType !== 'percentage' ? 'bg-white text-black' : 'text-white/50 hover:text-white'}`}
-                            >
-                                R$
-                            </button>
-                            <button 
-                                onClick={() => setMetadata({...metadata, discountType: 'percentage'})}
-                                className={`px-3 rounded-lg text-[10px] font-black transition-all ${metadata.discountType === 'percentage' ? 'bg-white text-black' : 'text-white/50 hover:text-white'}`}
-                            >
-                                %
-                            </button>
-                        </div>
-                    </div>
-                 </div>
               </div>
 
-              <div className="flex justify-between items-end pt-2">
-                  <div className="flex flex-col">
-                      <span className="text-[10px] font-black text-white/30 uppercase tracking-widest">Valor Final</span>
-                      {discountAmount > 0 && <span className="text-[9px] font-bold text-red-400 line-through decoration-red-400/50">{formatCurrency(subTotal)}</span>}
-                  </div>
-                  <span className="text-3xl font-black tracking-tighter text-white">{formatCurrency(finalTotal)}</span>
+              <div className="flex justify-between items-end">
+                  <span className="text-[10px] font-black text-white/30 uppercase tracking-widest">Valor Final</span>
+                  <span className="text-3xl font-black tracking-tighter">{formatCurrency(total)}</span>
               </div>
               
               <div className="grid grid-cols-2 gap-2">
@@ -787,8 +737,8 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
                         <div className="w-20 h-3 bg-black"></div>
                       </div>
                       <div className="text-right">
-                        <p className="text-[10px] font-black uppercase tracking-widest text-black/30">Investimento Final</p>
-                        <p className="text-4xl font-black tracking-tighter text-brand">{formatCurrency(finalTotal)}</p>
+                        <p className="text-[10px] font-black uppercase tracking-widest text-black/30">Investimento Total</p>
+                        <p className="text-4xl font-black tracking-tighter text-brand">{formatCurrency(total)}</p>
                       </div>
                   </div>
 
@@ -825,34 +775,12 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
                         </div>
                       ))}
 
-                      {selectedSections.finalInvestment && (
-                        <div className="pl-16 pt-8 space-y-6">
-                            {/* Breakdown de Preço */}
-                            <div className="border-t border-dashed border-gray-200 pt-6">
-                                <div className="flex justify-between items-center mb-2">
-                                    <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest">Subtotal</span>
-                                    <span className="text-sm font-bold text-gray-600">{formatCurrency(subTotal)}</span>
-                                </div>
-                                {discountAmount > 0 && (
-                                    <div className="flex justify-between items-center mb-2">
-                                        <span className="text-[10px] font-bold text-red-400 uppercase tracking-widest">Desconto Aplicado {metadata.discountType === 'percentage' && `(${metadata.discountValue}%)`}</span>
-                                        <span className="text-sm font-bold text-red-500">- {formatCurrency(discountAmount)}</span>
-                                    </div>
-                                )}
-                                <div className="flex justify-between items-end mt-4 bg-gray-50 p-4 rounded-xl">
-                                    <span className="text-[11px] font-black text-gray-900 uppercase tracking-widest">Total do Projeto</span>
-                                    <span className="text-3xl font-black text-gray-900">{formatCurrency(finalTotal)}</span>
-                                </div>
-                            </div>
-
-                            {metadata.observations && (
-                                <div className="space-y-2">
-                                <h4 className="text-[10px] font-black uppercase tracking-widest text-black/20">Termos e Acordos</h4>
-                                <p className="text-sm font-bold text-gray-900 leading-relaxed border-l-4 border-brand pl-6 italic bg-gray-50 p-6 rounded-r-2xl">
-                                    {metadata.observations}
-                                </p>
-                                </div>
-                            )}
+                      {selectedSections.finalInvestment && metadata.observations && (
+                        <div className="pl-16 pt-8 space-y-4">
+                          <h4 className="text-[10px] font-black uppercase tracking-widest text-black/20">Termos e Acordos</h4>
+                          <p className="text-sm font-bold text-gray-900 leading-relaxed border-l-4 border-brand pl-6 italic bg-gray-50 p-6 rounded-r-2xl">
+                            {metadata.observations}
+                          </p>
                         </div>
                       )}
                   </div>
@@ -866,53 +794,6 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
                         )}
                       </div>
                   </footer>
-                </section>
-              )}
-
-              {/* PÁGINA FINAL: CONTRA-CAPA (CULTURA & CONTATO) */}
-              {selectedSections.backCover && (
-                <section className="printable-page w-[210mm] min-h-[297mm] bg-black text-white p-24 flex flex-col justify-between relative shadow-2xl shrink-0 mb-12 print:mb-0 print:shadow-none animate-in zoom-in-95 duration-500 print-break-after">
-                  <PhantPattern />
-                  
-                  <div className="relative z-10 w-full h-full flex flex-col justify-between">
-                     {/* TOPO: LOGO */}
-                     <div className="w-48 h-auto overflow-hidden">
-                        {appConfig.proposalLogoUrl ? (
-                          <img src={appConfig.proposalLogoUrl} alt="Logo" className="w-full h-auto object-contain" />
-                        ) : (
-                          <span className="text-white text-4xl">{appConfig.companyName}</span>
-                        )}
-                     </div>
-
-                     {/* MEIO: CULTURA / FRASE IMPACTO */}
-                     <div className="space-y-8">
-                        <div className="space-y-2">
-                            <p className="text-[10px] font-black uppercase tracking-[0.5em] text-white/40">Fundamento</p>
-                            <h2 className="text-7xl font-black tracking-tighter leading-[0.9] uppercase">
-                              Crescimento<br/>é Movimento<br/><span className="text-brand">Estratégico.</span>
-                            </h2>
-                        </div>
-                        <p className="text-lg text-white/60 font-medium max-w-md leading-relaxed italic border-l-2 border-brand pl-6">
-                           "Não somos agência. Somos uma plataforma estruturada por método, produtos e inteligência aplicada para diagnosticar estagnação e provocar movimento."
-                        </p>
-                     </div>
-
-                     {/* RODAPÉ: CONTATO */}
-                     <div className="border-t border-white/20 pt-12 flex justify-between items-end">
-                        <div className="space-y-4">
-                           <p className="text-[10px] font-black uppercase tracking-[0.5em] text-white/40">Contato Direto</p>
-                           <div className="space-y-1">
-                              <p className="text-2xl font-black tracking-tighter">66 9 9900 0523</p>
-                              <p className="text-lg font-medium text-white/60">www.phant.com.br</p>
-                           </div>
-                        </div>
-                        
-                        <div className="text-right opacity-30">
-                           <p className="text-[9px] font-black uppercase tracking-widest">{appConfig.companyName} HQ</p>
-                           <p className="text-[9px] uppercase">All Rights Reserved © {new Date().getFullYear()}</p>
-                        </div>
-                     </div>
-                  </div>
                 </section>
               )}
             </div>
