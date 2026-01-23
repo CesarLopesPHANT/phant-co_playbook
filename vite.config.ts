@@ -2,30 +2,25 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 
-// https://vitejs.dev/config/
 export default defineConfig({
   plugins: [react()],
-  build: {
-    rollupOptions: {
-      // Isso impede que o Rollup tente resolver módulos nativos do Node.js
-      // que são importados por bibliotecas como o Supabase para uso em SSR.
-      external: [
-        'node:module',
-        'node:util',
-        'node:path',
-        'path',
-        'fs',
-        'crypto'
-      ]
-    }
-  },
   resolve: {
     alias: {
-      // Redireciona tentativas de importação de módulos de node para um stub vazio no browser
-      'node:module': 'identity-obj-proxy', 
+      // Em vez de externalizar (que faz o browser tentar baixar), 
+      // nós redirecionamos para módulos vazios.
+      'node:module': 'identity-obj-proxy',
+      'node:util': 'identity-obj-proxy',
+      'node:path': 'identity-obj-proxy',
     }
   },
-  optimizeDeps: {
-    exclude: ['@supabase/supabase-js']
+  build: {
+    rollupOptions: {
+      // Removemos o 'node:module' daqui para que o Rollup não o trate como dependência externa via URL
+    }
+  },
+  // Define variáveis de ambiente para bibliotecas que esperam Node
+  define: {
+    'process.env': {},
+    'global': 'globalThis',
   }
 });
