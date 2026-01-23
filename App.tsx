@@ -17,8 +17,8 @@ const App: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [appConfig, setAppConfig] = useState<AppCustomization>({
     companyName: 'PhantLab',
-    systemLogoUrl: 'https://phant.com.br/uploads/simbolo_roxo.png',
-    proposalLogoUrl: 'https://phant.com.br/uploads/logo_light.png',
+    systemLogoUrl: 'http://phant.com.br/uploads/simbolo_roxo.png',
+    proposalLogoUrl: 'http://phant.com.br/uploads/logo_light.png',
     primaryColor: '#2563eb'
   });
   

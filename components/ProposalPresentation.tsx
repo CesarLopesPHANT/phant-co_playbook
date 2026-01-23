@@ -12,7 +12,7 @@ interface ProposalPresentationProps {
 }
 
 const PHANT_PURPLE = "#6113cc";
-const PHANT_LOGO_URL = "https://phant.com.br/uploads/logo_light.png";
+const PHANT_LOGO_URL = "http://phant.com.br/uploads/logo_light.png";
 
 const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, items, strategicMap, appConfig, selectedSections }) => {
   const subTotal = items.reduce((acc, curr) => acc + curr.totalPrice, 0);
