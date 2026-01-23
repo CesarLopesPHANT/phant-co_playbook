@@ -10,6 +10,10 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <script>
+        // Polyfill para bibliotecas que dependem da variável global do Node.js
+        window.global = window;
+    </script>
     <style>
         body {
             font-family: 'Inter', sans-serif;
@@ -110,7 +114,9 @@
     "@google/genai": "https://esm.sh/@google/genai@^1.34.0",
     "recharts": "https://esm.sh/recharts@^3.6.0",
     "mammoth": "https://esm.sh/mammoth@1.6.0",
-    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.89.0"
+    "@supabase/supabase-js": "https://esm.sh/@supabase/supabase-js@^2.89.0",
+    "vite": "https://esm.sh/vite@^7.3.1",
+    "@vitejs/plugin-react": "https://esm.sh/@vitejs/plugin-react@^5.1.2"
   }
 }
 </script>
