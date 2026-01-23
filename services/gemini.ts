@@ -3,13 +3,11 @@ import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { SolutionItem, AIConfig, StrategicMapItem, ProposalMetadata } from "../types";
 import { SupabaseService } from "./api";
 
-// Acesso seguro a variáveis de ambiente definido no vite.config.ts
-const getEnvVar = (key: string): string | undefined => {
+// Safely access process.env
+const getEnvVar = (key: string) => {
   try {
-    if (key === 'API_KEY') return process.env.API_KEY;
-    
     if (typeof process !== 'undefined' && process.env) {
-      return (process.env as any)[key];
+      return process.env[key];
     }
   } catch (e) {
     // ignore error
@@ -37,6 +35,7 @@ export const getSalesMentorStream = async (userMessage: string, onChunk: (text: 
       thinkingBudget: 4000
     };
 
+    // Ensure maxOutputTokens allows room for thinking + response
     const effectiveMaxTokens = Math.max(config.maxOutputTokens || 8000, (config.thinkingBudget || 0) + 4000);
 
     const responseStream = await ai.models.generateContentStream({
