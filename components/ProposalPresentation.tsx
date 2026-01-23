@@ -1,5 +1,5 @@
 
-import React from 'react';
+import React, { useMemo } from 'react';
 import { ProposalItem, StrategicMapItem, ProposalMetadata, AppCustomization, ProposalSections } from '../types';
 
 interface ProposalPresentationProps {
@@ -15,12 +15,23 @@ const PHANT_PURPLE = "#6113cc";
 const PHANT_LOGO_URL = "http://phant.com.br/uploads/logo_light.png";
 
 const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, items, strategicMap, appConfig, selectedSections }) => {
-  const total = items.reduce((acc, curr) => acc + curr.totalPrice, 0);
+  const subTotal = items.reduce((acc, curr) => acc + curr.totalPrice, 0);
+
+  const discountAmount = useMemo(() => {
+    if (!metadata.discountValue || metadata.discountValue <= 0) return 0;
+    if (metadata.discountType === 'percentage') {
+      return subTotal * (metadata.discountValue / 100);
+    }
+    return metadata.discountValue;
+  }, [subTotal, metadata.discountValue, metadata.discountType]);
+
+  const finalTotal = Math.max(0, subTotal - discountAmount);
+
   const formatCurrency = (val: number) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
   
   // Default to all true if not provided (backward compatibility)
-  const sections = selectedSections || { cover: true, strategicMap: true, tacticalScope: true, finalInvestment: true };
+  const sections = selectedSections || { cover: true, strategicMap: true, tacticalScope: true, finalInvestment: true, backCover: true };
 
   return (
     <div className="bg-black text-white selection:bg-purple-500 selection:text-white font-sans scroll-smooth h-screen overflow-y-scroll snap-y snap-mandatory">
@@ -217,7 +228,15 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
                 <div className="p-16 bg-white/[0.03] border-2 border-purple-600/30 rounded-[60px] space-y-12 backdrop-blur-xl">
                   <div className="space-y-4">
                       <span className="text-xs font-black uppercase tracking-[0.4em] text-white/40">Investimento Estratégico Total</span>
-                      <div className="text-7xl md:text-[7rem] font-black tracking-tighter italic">{formatCurrency(total)}</div>
+                      <div className="flex flex-col items-center">
+                          {discountAmount > 0 && (
+                            <span className="text-xl font-bold text-red-400 line-through decoration-red-400/50 mb-2 opacity-60">
+                                {formatCurrency(subTotal)}
+                            </span>
+                          )}
+                          <div className="text-7xl md:text-[7rem] font-black tracking-tighter italic">{formatCurrency(finalTotal)}</div>
+                      </div>
+                      
                       {metadata.observations && <p className="text-white/40 font-medium italic mt-6 max-w-xl mx-auto text-sm leading-relaxed">{metadata.observations}</p>}
                   </div>
 
@@ -236,6 +255,54 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
                   <img src={PHANT_LOGO_URL} alt="Phant" className="h-12 mx-auto drop-shadow-lg" />
                   <p className="text-[10px] font-black uppercase tracking-[0.5em] text-white/20 italic">© 2025 PHANTLAB STRATEGIC PLATFORM • EXCLUSIVE ACCESS</p>
                 </footer>
+            </div>
+          </section>
+        )}
+
+        {/* SLIDE FINAL: CONTRA-CAPA (BACK COVER) */}
+        {sections.backCover && (
+          <section id="back-cover" className="relative flex flex-col justify-between">
+            <div className="absolute inset-0 bg-black z-0">
+               {/* Pattern overlay */}
+               <svg width="100%" height="100%" className="absolute inset-0 pointer-events-none opacity-[0.05]">
+                <pattern id="phant-text-pres" x="0" y="0" width="200" height="100" patternUnits="userSpaceOnUse">
+                  <text x="10" y="60" fontFamily="Inter" fontWeight="900" fontSize="40" fill="white">PHANT</text>
+                </pattern>
+                <rect width="100%" height="100%" fill="url(#phant-text-pres)" />
+              </svg>
+            </div>
+            
+            <div className="relative z-10 max-w-7xl mx-auto w-full h-full flex flex-col justify-between py-12">
+               {/* Top: Logo */}
+               <div>
+                  <img src={PHANT_LOGO_URL} alt="Phant" className="h-16 opacity-80" />
+               </div>
+
+               {/* Center: Statement */}
+               <div className="space-y-8">
+                  <p className="text-xs font-black uppercase tracking-[0.5em] text-white/40">Manifesto</p>
+                  <h2 className="text-7xl md:text-9xl font-black tracking-tighter uppercase leading-[0.9]">
+                    Crescimento<br/>é Movimento<br/><span className="text-purple-600">Estratégico.</span>
+                  </h2>
+                  <p className="text-xl md:text-2xl text-white/60 font-medium max-w-2xl leading-relaxed italic border-l-4 border-purple-600 pl-8">
+                     "Não somos agência. Somos uma plataforma estruturada por método, produtos e inteligência aplicada para diagnosticar estagnação e provocar movimento."
+                  </p>
+               </div>
+
+               {/* Bottom: Contact */}
+               <div className="flex flex-col md:flex-row justify-between items-end border-t border-white/10 pt-12">
+                   <div className="space-y-4">
+                      <p className="text-[10px] font-black uppercase tracking-[0.5em] text-white/40">Fale Conosco</p>
+                      <div>
+                         <p className="text-4xl font-black tracking-tighter">66 9 9900 0523</p>
+                         <p className="text-2xl font-medium text-white/60">www.phant.com.br</p>
+                      </div>
+                   </div>
+                   <div className="text-right opacity-30 mt-8 md:mt-0">
+                      <p className="text-[10px] font-black uppercase tracking-widest">{appConfig.companyName} HQ</p>
+                      <p className="text-[10px] uppercase">All Rights Reserved © {new Date().getFullYear()}</p>
+                   </div>
+               </div>
             </div>
           </section>
         )}
