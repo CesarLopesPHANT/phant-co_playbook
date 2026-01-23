@@ -5,9 +5,9 @@ import react from '@vitejs/plugin-react';
 export default defineConfig({
   plugins: [react()],
   resolve: {
+    // Prioriza explicitamente as versões de navegador das bibliotecas
+    mainFields: ['browser', 'module', 'main'],
     alias: {
-      // Em vez de externalizar (que faz o browser tentar baixar), 
-      // nós redirecionamos para módulos vazios.
       'node:module': 'identity-obj-proxy',
       'node:util': 'identity-obj-proxy',
       'node:path': 'identity-obj-proxy',
@@ -15,10 +15,17 @@ export default defineConfig({
   },
   build: {
     rollupOptions: {
-      // Removemos o 'node:module' daqui para que o Rollup não o trate como dependência externa via URL
+      // Garante que esses módulos não vazem como requisições externas no browser
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom', '@supabase/supabase-js'],
+        },
+      },
+    },
+    commonjsOptions: {
+      transformMixedEsModules: true,
     }
   },
-  // Define variáveis de ambiente para bibliotecas que esperam Node
   define: {
     'process.env': {},
     'global': 'globalThis',
