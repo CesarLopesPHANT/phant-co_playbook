@@ -15,12 +15,23 @@ const PHANT_PURPLE = "#6113cc";
 const PHANT_LOGO_URL = "http://phant.com.br/uploads/logo_light.png";
 
 const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, items, strategicMap, appConfig, selectedSections }) => {
-  const total = items.reduce((acc, curr) => acc + curr.totalPrice, 0);
+  const subtotal = items.reduce((acc, curr) => acc + curr.totalPrice, 0);
+  
+  const discountAmount = (() => {
+    if (!metadata.discountValue || metadata.discountValue <= 0) return 0;
+    if (metadata.discountType === 'percentage') {
+        return subtotal * (metadata.discountValue / 100);
+    }
+    return metadata.discountValue;
+  })();
+
+  const finalTotal = Math.max(subtotal - discountAmount, 0);
+
   const formatCurrency = (val: number) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
   
   // Default to all true if not provided (backward compatibility)
-  const sections = selectedSections || { cover: true, strategicMap: true, tacticalScope: true, finalInvestment: true };
+  const sections = selectedSections || { cover: true, strategicMap: true, tacticalScope: true, finalInvestment: true, backCover: true };
 
   return (
     <div className="bg-black text-white selection:bg-purple-500 selection:text-white font-sans scroll-smooth h-screen overflow-y-scroll snap-y snap-mandatory">
@@ -199,7 +210,7 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
           </section>
         )}
 
-        {/* SLIDE 5: INVESTIMENTO & FECHAMENTO */}
+        {/* SLIDE 5: INVESTIMENTO */}
         {sections.finalInvestment && (
           <section id="closing" className="relative">
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -216,8 +227,14 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
 
                 <div className="p-16 bg-white/[0.03] border-2 border-purple-600/30 rounded-[60px] space-y-12 backdrop-blur-xl">
                   <div className="space-y-4">
+                      {discountAmount > 0 && (
+                          <div className="flex justify-center items-center gap-4 text-sm font-bold opacity-60">
+                             <span className="line-through decoration-red-500">De: {formatCurrency(subtotal)}</span>
+                             <span className="text-purple-400">Economia: {formatCurrency(discountAmount)}</span>
+                          </div>
+                      )}
                       <span className="text-xs font-black uppercase tracking-[0.4em] text-white/40">Investimento Estratégico Total</span>
-                      <div className="text-7xl md:text-[7rem] font-black tracking-tighter italic">{formatCurrency(total)}</div>
+                      <div className="text-7xl md:text-[7rem] font-black tracking-tighter italic">{formatCurrency(finalTotal)}</div>
                       {metadata.observations && <p className="text-white/40 font-medium italic mt-6 max-w-xl mx-auto text-sm leading-relaxed">{metadata.observations}</p>}
                   </div>
 
@@ -228,16 +245,44 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
                       >
                         ACEITAR PROPOSTA
                       </button>
-                      {/* BOTAO REVISAR DADOS REMOVIDO */}
                   </div>
                 </div>
-
-                <footer className="pt-20 space-y-8">
-                  <img src={PHANT_LOGO_URL} alt="Phant" className="h-12 mx-auto drop-shadow-lg" />
-                  <p className="text-[10px] font-black uppercase tracking-[0.5em] text-white/20 italic">© 2025 PHANTLAB STRATEGIC PLATFORM • EXCLUSIVE ACCESS</p>
-                </footer>
             </div>
           </section>
+        )}
+
+        {/* SLIDE FINAL: CONTRA CAPA / CONTATO */}
+        {sections.backCover && (
+            <section id="contact" className="relative text-center">
+                <div className="max-w-5xl mx-auto space-y-16">
+                    <div className="space-y-6">
+                        <h2 className="text-7xl md:text-9xl font-black tracking-tighter leading-none uppercase">
+                          Vamos<br/>Construir<br/>o Futuro.
+                        </h2>
+                        <div className="w-32 h-2 bg-white mx-auto mt-8"></div>
+                    </div>
+
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-12 pt-12">
+                         <div className="space-y-2">
+                            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-purple-500">WhatsApp</p>
+                            <p className="text-2xl font-bold tracking-tight">66 9 9900 0523</p>
+                         </div>
+                         <div className="space-y-2">
+                            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-purple-500">Website</p>
+                            <p className="text-2xl font-bold tracking-tight">www.phant.com.br</p>
+                         </div>
+                         <div className="space-y-2">
+                            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-purple-500">E-mail</p>
+                            <p className="text-xl font-bold tracking-tight text-white/80">comercial@agenciaphant.com.br</p>
+                         </div>
+                    </div>
+
+                    <footer className="pt-20 space-y-8 border-t border-white/10 mt-20">
+                      <img src={PHANT_LOGO_URL} alt="Phant" className="h-12 mx-auto drop-shadow-lg opacity-50" />
+                      <p className="text-[10px] font-black uppercase tracking-[0.5em] text-white/20 italic">© 2025 PHANTLAB STRATEGIC PLATFORM</p>
+                    </footer>
+                </div>
+            </section>
         )}
       </div>
     </div>
