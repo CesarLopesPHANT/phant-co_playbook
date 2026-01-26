@@ -3,24 +3,9 @@ import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { SolutionItem, AIConfig, StrategicMapItem, ProposalMetadata } from "../types";
 import { SupabaseService } from "./api";
 
-// Safely access process.env
-const getEnvVar = (key: string) => {
-  try {
-    if (typeof process !== 'undefined' && process.env) {
-      return process.env[key];
-    }
-  } catch (e) {
-    // ignore error
-  }
-  return undefined;
-};
-
+// Initialize using the process.env.API_KEY directly as required
 const getAIInstance = () => {
-  const apiKey = getEnvVar('API_KEY');
-  if (!apiKey) {
-    throw new Error("API_KEY is not defined in the environment.");
-  }
-  return new GoogleGenAI({ apiKey });
+  return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
 export const getSalesMentorStream = async (userMessage: string, onChunk: (text: string) => void) => {
@@ -55,6 +40,7 @@ export const getSalesMentorStream = async (userMessage: string, onChunk: (text: 
 
     let fullText = "";
     for await (const chunk of responseStream) {
+      // Use .text property directly instead of .text()
       const text = chunk.text;
       if (text) {
         fullText += text;
@@ -87,6 +73,7 @@ export const improveObservationText = async (text: string): Promise<string> => {
         temperature: 0.2,
       }
     });
+    // Use .text property directly
     return response.text?.trim() || text;
   } catch (error) {
     console.error("Improve Text Error:", error);
@@ -109,7 +96,7 @@ export const generateStrategicMapping = async (metadata: ProposalMetadata): Prom
       model: 'gemini-3-pro-preview',
       contents: { parts: [{ text: prompt }] },
       config: {
-        tools: [{ googleSearch: {} }],
+        // Removed googleSearch tool to avoid conflict with JSON output requirement and URL listing mandate
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.ARRAY,
@@ -125,6 +112,7 @@ export const generateStrategicMapping = async (metadata: ProposalMetadata): Prom
       }
     });
 
+    // Use .text property directly
     return JSON.parse(response.text || "[]");
   } catch (error) {
     console.error("Strategic Mapping Error:", error);
@@ -150,6 +138,7 @@ export const suggestSolutionDetails = async (productName: string): Promise<Parti
         }
       }
     });
+    // Use .text property directly
     return JSON.parse(response.text || "{}");
   } catch {
     return {};
@@ -164,6 +153,7 @@ export const parseBulkSolutions = async (raw: string) => {
       contents: { parts: [{ text: `Extraia as soluções comerciais deste texto e retorne um array JSON: ${raw}` }] },
       config: { responseMimeType: "application/json" }
     });
+    // Use .text property directly
     return JSON.parse(res.text || "[]");
   } catch {
     return [];

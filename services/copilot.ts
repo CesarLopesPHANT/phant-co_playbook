@@ -87,13 +87,8 @@ export class CopilotService {
     this.onStateUpdate = callbacks.onState;
     this.onSuggestion = callbacks.onSuggestion;
     
-    // Config Gemini
-    const apiKey = (typeof process !== 'undefined' && process.env) ? process.env['API_KEY'] : undefined;
-    if (apiKey) {
-      this.ai = new GoogleGenAI({ apiKey });
-    } else {
-      this.ai = {} as any; 
-    }
+    // Config Gemini using process.env.API_KEY directly
+    this.ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
   }
 
   public setScript(script: ScriptDefinition) {
@@ -271,6 +266,7 @@ export class CopilotService {
         config: { responseMimeType: "application/json" }
       });
 
+      // Access .text property directly
       const result = JSON.parse(response.text || "{}");
       
       await SupabaseService.saveAssistScore(this.sessionId, result);
