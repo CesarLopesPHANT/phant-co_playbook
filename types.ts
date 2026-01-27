@@ -34,7 +34,7 @@ export interface SolutionItem {
   diferenciais?: string[]; 
   dica_venda: string;
   link?: string;
-  entregaveis?: string[];
+  entregaveis: string[]; // Lista de tarefas para o Ekyte
 }
 
 export interface ProposalItem {
@@ -65,7 +65,6 @@ export interface ProposalMetadata {
   date: string;
   consultant: string;
   headline?: string;
-  // Novos campos de desconto
   discountValue?: number;
   discountType?: 'fixed' | 'percentage';
 }
@@ -86,12 +85,12 @@ export interface ProposalSections {
   cover: boolean;
   strategicMap: boolean;
   tacticalScope: boolean;
-  finalInvestment: boolean; // Utilizado para controlar a página final ou seção de investimento
-  backCover: boolean; // Nova seção de encerramento/contato
+  finalInvestment: boolean;
+  backCover: boolean;
 }
 
 export interface MonthlyGoal {
-  month: string; // Formato "YYYY-MM"
+  month: string;
   target: number;
 }
 
@@ -126,13 +125,14 @@ export interface ChatMessage {
 }
 
 export interface AIConfig {
-  systemInstruction: string;
+  mentorInstruction: string;      // Instrução para o Mentor de Vendas (Chat)
+  mappingInstruction: string;     // Instrução para o Mapeamento Estratégico (Proposta)
+  suggesterInstruction: string;   // Instrução para o Sugestor de Soluções (Admin/Catálogo)
+  copilotInstruction: string;     // Instrução para o Copiloto de Reunião
   temperature: number;
   maxOutputTokens: number;
   thinkingBudget: number;
 }
-
-// --- FICHARIO TYPES ---
 
 export interface FicharioFolder {
   id: string;
@@ -143,7 +143,7 @@ export interface FicharioFolder {
 }
 
 export interface FicharioFile {
-  id: string; // drive_file_id
+  id: string;
   name: string;
   type: string;
   url: string;
@@ -154,8 +154,6 @@ export interface FicharioFile {
   previewUrl: string;
   downloadUrl: string;
 }
-
-// --- COPILOT TYPES ---
 
 export interface ScriptPhase {
   id: string;
@@ -194,7 +192,7 @@ export interface TranscriptSegment {
 
 export interface CopilotState {
   currentPhaseIndex: number;
-  checklist: Record<string, boolean>; // phaseId_checkIndex -> true
+  checklist: Record<string, boolean>;
   transcript: TranscriptSegment[];
   suggestions: string[];
   isRecording: boolean;
