@@ -1,4 +1,3 @@
-
 import { PlaybookModule, ScriptDefinition } from './types';
 
 export const PLAYBOOK_STRUCTURE: PlaybookModule[] = [

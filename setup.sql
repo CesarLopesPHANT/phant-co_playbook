@@ -1,49 +1,52 @@
 
 -- ==============================================================================
--- SCHEMA V7: ATUALIZAÇÃO DO CATÁLOGO E INTELIGÊNCIA PHANTLAB
+-- SCHEMA V6: FICHÁRIO INTELIGENTE (PASTAS VIRTUAIS)
 -- ==============================================================================
 
--- 1. ATUALIZAÇÃO DA TABELA DE SOLUÇÕES (CATÁLOGO)
--- Adiciona campos necessários para o novo layout de acordeão e automação Ekyte
-ALTER TABLE IF EXISTS public.solutions ADD COLUMN IF NOT EXISTS descricao TEXT;
-ALTER TABLE IF EXISTS public.solutions ADD COLUMN IF NOT EXISTS entregaveis TEXT[] DEFAULT '{}';
-ALTER TABLE IF EXISTS public.solutions ADD COLUMN IF NOT EXISTS is_favorite BOOLEAN DEFAULT false;
-ALTER TABLE IF EXISTS public.solutions ADD COLUMN IF NOT EXISTS variaveis_opcionais JSONB DEFAULT '[]';
-
--- Garantir que a tabela solutions tenha RLS habilitado
-ALTER TABLE public.solutions ENABLE ROW LEVEL SECURITY;
-
--- Remover políticas antigas se existirem para evitar conflitos e recriar
-DROP POLICY IF EXISTS "Public access solutions" ON public.solutions;
-CREATE POLICY "Public access solutions" ON public.solutions FOR ALL USING (true);
-
--- 2. TABELA DE CONFIGURAÇÃO DE IA (INTELIGÊNCIA)
--- Suporta o armazenamento do objeto JSON com os 4 blocos de instruções
-CREATE TABLE IF NOT EXISTS public.ai_config (
-    id TEXT PRIMARY KEY, -- ex: 'mentor'
-    content JSONB NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+-- 1. TABELA DE PASTAS (CATEGORIAS)
+CREATE TABLE IF NOT EXISTS public.fichario_folders (
+    id TEXT PRIMARY KEY, -- ex: 'docs', 'sheets'
+    name TEXT NOT NULL,
+    icon TEXT NOT NULL,
+    file_types TEXT[], -- Array de tipos aceitos ex: ['pdf', 'gdoc']
+    is_system BOOLEAN DEFAULT false,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
 
-ALTER TABLE public.ai_config ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Public access ai_config" ON public.ai_config;
-CREATE POLICY "Public access ai_config" ON public.ai_config FOR ALL USING (true);
+ALTER TABLE public.fichario_folders ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public access folders" ON public.fichario_folders;
+CREATE POLICY "Public access folders" ON public.fichario_folders FOR ALL USING (true);
 
--- 3. TABELA DE METAS E PERSONALIZAÇÃO (APP_CONFIG)
--- Usada para metas de vendas e branding do sistema
-CREATE TABLE IF NOT EXISTS public.app_config (
-    id TEXT PRIMARY KEY, -- 'branding', 'sales_goals'
-    content JSONB NOT NULL,
-    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+-- Inserção de Pastas Padrão (Idempotente)
+INSERT INTO public.fichario_folders (id, name, icon, file_types, is_system)
+VALUES 
+    ('scripts', 'Scripts & Roteiros', '🗣️', ARRAY['script'], true),
+    ('docs', 'Documentos & PDFs', '📄', ARRAY['pdf', 'gdoc', 'doc', 'docx', 'txt'], false),
+    ('presentations', 'Apresentações', '📊', ARRAY['gslides', 'ppt', 'pptx'], false),
+    ('spreadsheets', 'Planilhas & Dados', '📗', ARRAY['gsheet', 'xls', 'xlsx', 'csv'], false),
+    ('media', 'Mídia & Imagens', '🖼️', ARRAY['image', 'video', 'png', 'jpg', 'jpeg', 'mp4'], false),
+    ('others', 'Outros Arquivos', '📦', ARRAY['unknown', 'zip', 'rar'], false)
+ON CONFLICT (id) DO NOTHING;
+
+-- 2. TABELA DE ARQUIVOS (ATUALIZAÇÃO)
+CREATE TABLE IF NOT EXISTS public.fichario (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    drive_file_id TEXT UNIQUE NOT NULL,
+    nome TEXT NOT NULL,
+    formato TEXT,
+    link TEXT,
+    folder_id TEXT, -- ID do Drive (Físico)
+    virtual_folder_id TEXT REFERENCES public.fichario_folders(id), -- ID da Pasta Virtual (Lógico)
+    job_id TEXT,
+    data_atualizacao TIMESTAMP WITH TIME ZONE,
+    raw JSONB
 );
 
-ALTER TABLE public.app_config ENABLE ROW LEVEL SECURITY;
-DROP POLICY IF EXISTS "Public access app_config" ON public.app_config;
-CREATE POLICY "Public access app_config" ON public.app_config FOR ALL USING (true);
+ALTER TABLE public.fichario ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public access fichario" ON public.fichario;
+CREATE POLICY "Public access fichario" ON public.fichario FOR ALL USING (true);
 
--- 4. ÍNDICES DE PERFORMANCE
-CREATE INDEX IF NOT EXISTS idx_solutions_categoria ON public.solutions(categoria);
-CREATE INDEX IF NOT EXISTS idx_solutions_is_favorite ON public.solutions(is_favorite);
+-- Função de trigger para auto-categorização (Opcional, mas faremos via código JS para flexibilidade)
+-- A lógica principal estará no SupabaseService.syncFicharioToDb
 
--- LOG DE SUCESSO
-SELECT 'Schema V7 (Catálogo Accordion + Ekyte + IA) aplicado com sucesso.' as status;
+SELECT 'Schema V6 (Fichário Pastas) aplicado com sucesso.' as status;

@@ -1,4 +1,3 @@
-
 export type ModuleStatus = 'ATIVA' | 'EM CONSTRUÇÃO' | 'DRAFT' | 'REVIEW' | 'PUBLISHED' | 'ARCHIVED';
 export type SourceType = 'Drive' | 'Manual' | 'IA';
 export type UserRole = 'MASTER' | 'USER';
@@ -34,7 +33,7 @@ export interface SolutionItem {
   diferenciais?: string[]; 
   dica_venda: string;
   link?: string;
-  entregaveis: string[]; // Lista de tarefas para o Ekyte
+  entregaveis?: string[];
 }
 
 export interface ProposalItem {
@@ -65,8 +64,8 @@ export interface ProposalMetadata {
   date: string;
   consultant: string;
   headline?: string;
-  discountValue?: number;
   discountType?: 'fixed' | 'percentage';
+  discountValue?: number;
 }
 
 export interface ProposalRecord {
@@ -85,12 +84,12 @@ export interface ProposalSections {
   cover: boolean;
   strategicMap: boolean;
   tacticalScope: boolean;
-  finalInvestment: boolean;
-  backCover: boolean;
+  finalInvestment: boolean; // Utilizado para controlar a página final ou seção de investimento
+  backCover: boolean; // Nova seção de encerramento/contato
 }
 
 export interface MonthlyGoal {
-  month: string;
+  month: string; // Formato "YYYY-MM"
   target: number;
 }
 
@@ -125,14 +124,13 @@ export interface ChatMessage {
 }
 
 export interface AIConfig {
-  mentorInstruction: string;      // Instrução para o Mentor de Vendas (Chat)
-  mappingInstruction: string;     // Instrução para o Mapeamento Estratégico (Proposta)
-  suggesterInstruction: string;   // Instrução para o Sugestor de Soluções (Admin/Catálogo)
-  copilotInstruction: string;     // Instrução para o Copiloto de Reunião
+  systemInstruction: string;
   temperature: number;
   maxOutputTokens: number;
   thinkingBudget: number;
 }
+
+// --- FICHARIO TYPES ---
 
 export interface FicharioFolder {
   id: string;
@@ -143,7 +141,7 @@ export interface FicharioFolder {
 }
 
 export interface FicharioFile {
-  id: string;
+  id: string; // drive_file_id
   name: string;
   type: string;
   url: string;
@@ -154,6 +152,8 @@ export interface FicharioFile {
   previewUrl: string;
   downloadUrl: string;
 }
+
+// --- COPILOT TYPES ---
 
 export interface ScriptPhase {
   id: string;
@@ -192,7 +192,7 @@ export interface TranscriptSegment {
 
 export interface CopilotState {
   currentPhaseIndex: number;
-  checklist: Record<string, boolean>;
+  checklist: Record<string, boolean>; // phaseId_checkIndex -> true
   transcript: TranscriptSegment[];
   suggestions: string[];
   isRecording: boolean;

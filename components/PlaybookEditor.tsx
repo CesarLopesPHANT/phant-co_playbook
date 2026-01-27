@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { PlaybookModule, UserRole, SolutionItem, SolutionCategory, SolutionMaturity, ProposalItem, AppCustomization } from '../types';
 import { SupabaseService } from '../services/api';
@@ -12,7 +11,7 @@ import PlaybookGuide from './PlaybookGuide';
 import SLAPage from './SLAPage';
 import PrivacyPolicy from './PrivacyPolicy';
 import TermsOfService from './TermsOfService';
-import CopilotModule from './Assist/CopilotModule'; // NOVO IMPORT
+import CopilotModule from './Assist/CopilotModule';
 
 interface PlaybookEditorProps {
   module: PlaybookModule;
@@ -103,7 +102,7 @@ const PlaybookEditor: React.FC<PlaybookEditorProps> = ({ module, currentRole, on
   }
 
   // MÓDULOS ESPECIAIS
-  if (module.type === 'copilot') return <CopilotModule currentRole={currentRole} />; // NOVO HANDLER
+  if (module.type === 'copilot') return <CopilotModule currentRole={currentRole} />;
   if (module.type === 'admin') return <AdminSettings />;
   if (module.type === 'dashboard') return <SalesDashboard />;
   if (module.type === 'fichario') return <Fichario currentRole={currentRole} />;
