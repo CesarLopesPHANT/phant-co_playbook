@@ -13,17 +13,13 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      // Resolve problemas com módulos que esperam APIs do Node como o 'path' usado no mammoth
+      // Resolve problemas com módulos que esperam APIs do Node
       'path': 'path-browserify',
     },
   },
   build: {
-    commonjsOptions: {
-      // Garante que módulos CommonJS mistos sejam transformados corretamente
-      transformMixedEsModules: true,
-    },
     rollupOptions: {
-      // Previne que o erro de "createRequire" do node:module quebre o build
+      // Previne que o erro de "createRequire" do node:module quebre o build do Supabase
       external: ['node:module'],
     },
   },

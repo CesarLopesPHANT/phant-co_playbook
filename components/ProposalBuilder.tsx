@@ -157,6 +157,24 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
     }
   };
 
+  const handleDeleteProposal = async (id: string, clientName: string) => {
+    if (!confirm(`Tem certeza que deseja excluir permanentemente a proposta para "${clientName}"?`)) return;
+    
+    // Deleta do Supabase
+    const res = await SupabaseService.deleteProposal(id);
+    
+    if (res.success) {
+      // Deleta do frontend independente do banco para garantir resposta imediata ao usuário
+      setProposalHistory(prev => prev.filter(p => p.id !== id));
+    } else {
+      // Se falhar no banco, ainda assim oferecemos a exclusão visual se o usuário desejar (limpeza de cache local)
+      console.error("Erro ao deletar do banco:", res.message);
+      if (confirm("Houve um erro no servidor. Deseja remover apenas da visualização local?")) {
+        setProposalHistory(prev => prev.filter(p => p.id !== id));
+      }
+    }
+  };
+
   const saveToCloud = async (silent = false) => {
     if (!metadata.clientName) {
       showError("Defina o nome do cliente antes de salvar.");
@@ -518,11 +536,21 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
               {activeTab === 'history' && (
                 <div className="space-y-4 animate-in slide-in-from-left-4 duration-300">
                   {proposalHistory.map(record => (
-                    <div key={record.id} className="p-5 bg-gray-50 rounded-[24px] border border-gray-100 group hover:border-brand transition-all cursor-pointer" onClick={() => loadFromHistory(record)}>
-                       <div className="flex justify-between items-start mb-2">
+                    <div key={record.id} className="p-5 bg-gray-50 rounded-[24px] border border-gray-100 group hover:border-brand transition-all cursor-pointer relative" onClick={() => loadFromHistory(record)}>
+                       <div className="flex justify-between items-start mb-2 pr-8">
                          <p className="font-black text-[12px] text-gray-900 leading-none">{record.client_name}</p>
                          {getStatusBadge(record.status)}
                        </div>
+                       
+                       {/* Botão de Excluir */}
+                       <button 
+                         onClick={(e) => { e.stopPropagation(); handleDeleteProposal(record.id, record.client_name); }}
+                         className="absolute top-4 right-4 p-2 text-gray-300 hover:text-red-500 transition-all opacity-0 group-hover:opacity-100"
+                         title="Excluir Proposta"
+                       >
+                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
+                       </button>
+
                        <div className="flex justify-between items-center mt-3">
                           <span className="text-[8px] font-bold text-gray-400 uppercase tracking-widest">{new Date(record.created_at).toLocaleDateString('pt-BR')}</span>
                           <span className="text-[10px] font-black text-brand">{formatCurrency(record.total_value)}</span>

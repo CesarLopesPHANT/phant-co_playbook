@@ -1,4 +1,3 @@
-
 {
   "name": "phantlab-sales-playbook",
   "private": true,
@@ -10,19 +9,19 @@
     "preview": "vite preview"
   },
   "dependencies": {
-    "@google/genai": "^1.34.0",
-    "@supabase/supabase-js": "^2.89.0",
-    "mammoth": "1.6.0",
-    "path-browserify": "^1.0.1",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
-    "recharts": "^3.6.0"
+    "@google/genai": "^1.34.0",
+    "recharts": "^3.6.0",
+    "mammoth": "1.6.0",
+    "@supabase/supabase-js": "^2.89.0",
+    "vite": "^7.3.1",
+    "@vitejs/plugin-react": "^5.1.2"
   },
   "devDependencies": {
-    "@types/react": "^19.0.0",
-    "@types/react-dom": "^19.0.0",
-    "@vitejs/plugin-react": "^5.1.2",
-    "typescript": "^5.0.0",
-    "vite": "^6.4.1"
+    "@types/node": "^22.14.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "~5.8.2",
+    "vite": "^6.2.0"
   }
 }

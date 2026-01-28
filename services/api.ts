@@ -323,6 +323,15 @@ export const SupabaseService = {
       return { success: false, message: err.message };
     }
   },
+  async deleteProposal(id: string) {
+    try {
+      const { error } = await supabase.from('proposals_history').delete().eq('id', id);
+      if (error) throw error;
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, message: err.message };
+    }
+  },
   async fetchProposalsHistory(): Promise<ProposalRecord[]> {
     try {
       const { data, error } = await supabase.from('proposals_history').select('*').order('created_at', { ascending: false });

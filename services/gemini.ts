@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { SolutionItem, AIConfig, StrategicMapItem, ProposalMetadata } from "../types";
 import { SupabaseService } from "./api";
@@ -138,7 +137,9 @@ export const suggestSolutionDetails = async (productName: string): Promise<Parti
     const ai = getAIInstance();
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: { parts: [{ text: `Gere detalhes técnicos (promessa, descrição, maturidade) para a solução comercial: ${productName}` }] },
+      contents: { parts: [{ text: `Você é um Arquiteto de Soluções PhantLab. Gere detalhes estratégicos e operacionais para a solução comercial: ${productName}. 
+      As tarefas/entregáveis devem ser pensadas como FASES SEQUENCIAIS de implementação do projeto.
+      Gere entre 4 a 6 fases principais de entrega que compõem o cronograma.` }] },
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -146,14 +147,41 @@ export const suggestSolutionDetails = async (productName: string): Promise<Parti
           properties: {
             promessa: { type: Type.STRING },
             descricao: { type: Type.STRING },
-            maturidade: { type: Type.STRING }
-          }
+            maturidade: { type: Type.STRING },
+            entregaveis: { 
+              type: Type.ARRAY,
+              items: { type: Type.STRING },
+              description: "Lista de 4 a 6 fases sequenciais do cronograma de entrega técnica."
+            }
+          },
+          required: ["promessa", "descricao", "maturidade", "entregaveis"]
         }
       }
     });
     return JSON.parse(response.text || "{}");
   } catch {
     return {};
+  }
+};
+
+export const generateSolutionDeliverables = async (productName: string, description: string = ""): Promise<string[]> => {
+  try {
+    const ai = getAIInstance();
+    const response = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: { parts: [{ text: `Você é um Gerente de Operações PhantLab. Com base na solução comercial "${productName}" e descrição "${description}", gere uma lista de 4 a 8 FASES SEQUENCIAIS de implementação (cronograma de entrega). Retorne apenas um array JSON de strings.` }] },
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: { type: Type.STRING }
+        }
+      }
+    });
+    return JSON.parse(response.text || "[]");
+  } catch (error) {
+    console.error("Deliverables Generation Error:", error);
+    return [];
   }
 };
 

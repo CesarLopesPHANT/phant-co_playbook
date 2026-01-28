@@ -1,24 +1,26 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { StorageService, SupabaseService, getAppOrigin, AuthService } from '../services/api';
 import { SolutionItem, SolutionCategory, SolutionSubCategory, SolutionDuration, SolutionMaturity, AIConfig, AppCustomization, MonthlyGoal } from '../types';
-import { suggestSolutionDetails, parseBulkSolutions } from '../services/gemini';
+import { suggestSolutionDetails, parseBulkSolutions, generateSolutionDeliverables } from '../services/gemini';
 import mammoth from 'mammoth';
 
-type AdminTab = 'solutions' | 'essencia' | 'intelligence' | 'customization' | 'metas';
+type AdminTab = 'solutions' | 'metas' | 'essencia' | 'intelligence' | 'customization';
 
 const AdminSettings: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AdminTab>('solutions');
   const [solutions, setSolutions] = useState<SolutionItem[]>([]);
+  const [expandedId, setExpandedId] = useState<string | number | null>(null);
   const [isMagicFilling, setIsMagicFilling] = useState<string | number | null>(null);
+  const [isGeneratingDeliverables, setIsGeneratingDeliverables] = useState<string | number | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isSyncing, setIsSyncing] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   const [toast, setToast] = useState<{ message: string; type: 'success' | 'error' } | null>(null);
   const [searchTerm, setSearchTerm] = useState('');
   
-  // Estado para Inputs temporários de variáveis (Upsell/Cross-sell)
+  // Estado para Inputs temporários
   const [variableInputs, setVariableInputs] = useState<Record<string, { label: string, valor: string }>>({});
+  const [deliverableInputs, setDeliverableInputs] = useState<Record<string, string>>({});
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const systemLogoInputRef = useRef<HTMLInputElement>(null);
@@ -59,7 +61,6 @@ const AdminSettings: React.FC = () => {
   const loadAllData = useCallback(async () => {
     setIsInitialLoading(true);
     try {
-      // Usamos chamadas individuais em vez de Promise.all para não travar tudo se uma tabela falhar
       const sols = await SupabaseService.fetchSolutions().catch(() => []);
       const ai = await SupabaseService.fetchAIConfig().catch(() => null);
       const ess = await SupabaseService.fetchEssencia().catch(() => null);
@@ -67,11 +68,10 @@ const AdminSettings: React.FC = () => {
       const loadedGoals = await SupabaseService.fetchGoals().catch(() => []);
       const history = await SupabaseService.fetchProposalsHistory().catch(() => []);
 
-      // Calculate realized per month
       const realizedMap: Record<string, number> = {};
       history?.forEach(p => {
         if (p.created_at) {
-          const monthKey = new Date(p.created_at).toISOString().slice(0, 7); // YYYY-MM
+          const monthKey = new Date(p.created_at).toISOString().slice(0, 7);
           realizedMap[monthKey] = (realizedMap[monthKey] || 0) + (p.total_value || 0);
         }
       });
@@ -94,7 +94,6 @@ const AdminSettings: React.FC = () => {
   const generateGoalList = (existing: MonthlyGoal[]) => {
     const list = [...existing];
     const today = new Date();
-    // Gera 12 meses (6 para trás, 6 para frente) se não existirem
     for (let i = -6; i <= 6; i++) {
         const d = new Date(today.getFullYear(), today.getMonth() + i, 1);
         const key = d.toISOString().slice(0, 7);
@@ -102,7 +101,7 @@ const AdminSettings: React.FC = () => {
             list.push({ month: key, target: 0 });
         }
     }
-    return list.sort((a, b) => b.month.localeCompare(a.month)); // Decrescente
+    return list.sort((a, b) => b.month.localeCompare(a.month));
   };
 
   useEffect(() => {
@@ -129,12 +128,10 @@ const AdminSettings: React.FC = () => {
   const handleLogoUpload = (e: React.ChangeEvent<HTMLInputElement>, type: 'system' | 'proposal') => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     if (file.size > 1024 * 1024) {
       showToast("O logo deve ter no máximo 1MB", "error");
       return;
     }
-
     const reader = new FileReader();
     reader.onloadend = () => {
       if (type === 'system') {
@@ -150,12 +147,11 @@ const AdminSettings: React.FC = () => {
   const handleMagicFill = async (id: string | number) => {
     const item = solutions.find(s => s.id === id);
     if (!item || !item.solucao) return;
-
     setIsMagicFilling(id);
     try {
       const details = await suggestSolutionDetails(item.solucao);
       setSolutions(prev => prev.map(s => s.id === id ? { ...s, ...details } : s));
-      showToast("IA gerou os detalhes da oferta!");
+      showToast("IA gerou os detalhes e o cronograma da oferta!");
     } catch (err) {
       showToast("Erro na IA", "error");
     } finally {
@@ -163,16 +159,31 @@ const AdminSettings: React.FC = () => {
     }
   };
 
+  const handleGenerateDeliverables = async (id: string | number) => {
+    const item = solutions.find(s => s.id === id);
+    if (!item || !item.solucao) return;
+    setIsGeneratingDeliverables(id);
+    try {
+      const tasks = await generateSolutionDeliverables(item.solucao, item.descricao || "");
+      if (tasks.length > 0) {
+        setSolutions(prev => prev.map(s => s.id === id ? { ...s, entregaveis: tasks } : s));
+        showToast("Fases do cronograma geradas pela IA!");
+      }
+    } catch (err) {
+      showToast("Erro ao gerar fases", "error");
+    } finally {
+      setIsGeneratingDeliverables(null);
+    }
+  };
+
   const handleImportDocx = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-
     setIsImporting(true);
     try {
       const arrayBuffer = await file.arrayBuffer();
       const result = await mammoth.extractRawText({ arrayBuffer });
       const text = result.value;
-      
       const newItems = await parseBulkSolutions(text);
       if (newItems && newItems.length > 0) {
         const formatted: SolutionItem[] = newItems.map((item, i) => ({
@@ -184,10 +195,10 @@ const AdminSettings: React.FC = () => {
           maturidade: (item.maturidade as SolutionMaturity) || 'Base',
           valor_base_num: item.valor_base_num || 0,
           variaveis_opcionais: [],
+          entregaveis: [],
           fee_mensal: item.fee_mensal || "R$ 0",
           promessa: item.promessa || ""
         } as SolutionItem));
-        
         setSolutions(prev => [...prev, ...formatted]);
         showToast(`${formatted.length} soluções importadas!`);
       }
@@ -211,9 +222,11 @@ const AdminSettings: React.FC = () => {
       fee_mensal: "R$ 0",
       valor_base_num: 0,
       variaveis_opcionais: [],
+      entregaveis: [],
       dica_venda: ""
     };
     setSolutions([newItem, ...solutions]);
+    setExpandedId(newItem.id);
   };
 
   const updateSolution = (id: string | number, field: keyof SolutionItem, value: any) => {
@@ -221,37 +234,28 @@ const AdminSettings: React.FC = () => {
   };
 
   const removeSolution = (id: string | number) => {
-    setSolutions(prev => prev.filter(s => s.id !== id));
+    if (confirm("Deseja remover esta solução?")) {
+      setSolutions(prev => prev.filter(s => s.id !== id));
+      if (expandedId === id) setExpandedId(null);
+    }
   };
   
   const toggleFavorite = (id: string | number) => {
     setSolutions(prev => prev.map(s => s.id === id ? { ...s, is_favorite: !s.is_favorite } : s));
   };
 
-  // --- GERENCIAMENTO DE VARIÁVEIS OPCIONAIS ---
-  
   const handleAddVariable = (solutionId: string | number) => {
     const input = variableInputs[String(solutionId)] || { label: '', valor: '' };
     if (!input.label.trim()) return;
-    
     const valorNum = parseFloat(input.valor) || 0;
-    
     setSolutions(prev => prev.map(s => {
        if (s.id === solutionId) {
           const currentVars = s.variaveis_opcionais || [];
-          return { 
-             ...s, 
-             variaveis_opcionais: [...currentVars, { label: input.label, valor: valorNum }] 
-          };
+          return { ...s, variaveis_opcionais: [...currentVars, { label: input.label, valor: valorNum }] };
        }
        return s;
     }));
-
-    // Reset input
-    setVariableInputs(prev => ({
-       ...prev,
-       [String(solutionId)]: { label: '', valor: '' }
-    }));
+    setVariableInputs(prev => ({ ...prev, [String(solutionId)]: { label: '', valor: '' } }));
   };
 
   const handleRemoveVariable = (solutionId: string | number, index: number) => {
@@ -265,17 +269,29 @@ const AdminSettings: React.FC = () => {
      }));
   };
 
-  const updateVariableInput = (solutionId: string | number, field: 'label' | 'valor', value: string) => {
-     setVariableInputs(prev => ({
-        ...prev,
-        [String(solutionId)]: {
-           ...(prev[String(solutionId)] || { label: '', valor: '' }),
-           [field]: value
-        }
-     }));
+  const handleAddDeliverable = (solutionId: string | number) => {
+    const text = deliverableInputs[String(solutionId)] || '';
+    if (!text.trim()) return;
+    setSolutions(prev => prev.map(s => {
+      if (s.id === solutionId) {
+        const current = s.entregaveis || [];
+        return { ...s, entregaveis: [...current, text.trim()] };
+      }
+      return s;
+    }));
+    setDeliverableInputs(prev => ({ ...prev, [String(solutionId)]: '' }));
   };
 
-  // --- PERSISTÊNCIA AUXILIAR ---
+  const handleRemoveDeliverable = (solutionId: string | number, index: number) => {
+    setSolutions(prev => prev.map(s => {
+      if (s.id === solutionId) {
+        const current = [...(s.entregaveis || [])];
+        current.splice(index, 1);
+        return { ...s, entregaveis: current };
+      }
+      return s;
+    }));
+  };
 
   const saveAIConfig = async () => {
     try {
@@ -302,7 +318,6 @@ const AdminSettings: React.FC = () => {
     setIsSyncing(true);
     try {
       const res = await SupabaseService.syncAppConfig(appConfig);
-      
       if (res.success) {
         showToast("Configurações salvas! Atualizando interface...");
         setTimeout(() => {
@@ -342,11 +357,9 @@ const AdminSettings: React.FC = () => {
 
   const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
-  // LOGICA DE FILTRO E ORDENAÇÃO
   const filteredSolutions = solutions
     .filter(s => s.solucao.toLowerCase().includes(searchTerm.toLowerCase()))
     .sort((a, b) => {
-       // Favoritos primeiro
        if (a.is_favorite === b.is_favorite) return 0;
        return a.is_favorite ? -1 : 1;
     });
@@ -370,7 +383,7 @@ const AdminSettings: React.FC = () => {
 
       <header className="flex flex-col md:flex-row justify-between items-start md:items-end gap-6">
         <div>
-          <h1 className="text-6xl font-black text-gray-900 tracking-tighter leading-none mb-4 tracking-tighter">Administração</h1>
+          <h1 className="text-6xl font-black text-gray-900 tracking-tighter leading-none mb-4">Administração</h1>
           <p className="text-gray-400 text-xl font-medium tracking-tight">Governança de Ativos e Inteligência</p>
         </div>
         <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-gray-100 flex-wrap gap-1">
@@ -406,135 +419,190 @@ const AdminSettings: React.FC = () => {
                 {isImporting ? 'Importando...' : 'Importar DOCX'}
               </button>
               <input type="file" ref={fileInputRef} onChange={handleImportDocx} accept=".docx" className="hidden" />
-              
               <button onClick={handleSyncSolutions} disabled={isSyncing} className={`px-8 py-4 ${isSyncing ? 'bg-gray-400' : 'bg-brand'} text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:bg-blue-700 transition-all whitespace-nowrap`}>
                 {isSyncing ? 'Sincronizando...' : 'Sincronizar com Nuvem'}
               </button>
             </div>
           </div>
 
-          <div className="space-y-6">
-            {filteredSolutions.map((item) => (
-              <div key={item.id} className={`app-card p-10 bg-white border border-gray-100 space-y-8 group transition-all hover:border-brand ${item.is_favorite ? 'ring-2 ring-amber-400/20' : ''}`}>
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-6 relative">
-                  <div className="md:col-span-2 space-y-2 relative">
-                    <label className="text-[9px] font-black text-gray-300 uppercase tracking-widest flex items-center gap-2">
-                       Nome da Solução
-                       {item.is_favorite && <span className="text-amber-500">★ Destaque</span>}
-                    </label>
-                    <div className="flex gap-2">
-                       <button 
-                         onClick={() => toggleFavorite(item.id)}
-                         className={`p-4 rounded-xl transition-all ${item.is_favorite ? 'bg-amber-100 text-amber-500' : 'bg-gray-50 text-gray-300 hover:bg-amber-50 hover:text-amber-400'}`}
-                         title="Favoritar / Destacar no Topo"
-                       >
-                          <svg className="w-5 h-5" fill={item.is_favorite ? "currentColor" : "none"} stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M11.049 2.927c.3-.921 1.603-.921 1.902 0l1.519 4.674a1 1 0 00.95.69h4.915c.969 0 1.371 1.24.588 1.81l-3.976 2.888a1 1 0 00-.363 1.118l1.518 4.674c.3.922-.755 1.688-1.538 1.118l-3.976-2.888a1 1 0 00-1.176 0l-3.976 2.888c-.783.57-1.838-.197-1.538-1.118l1.518-4.674a1 1 0 00-.363-1.118l-3.976-2.888c-.784-.57-.38-1.81.588-1.81h4.914a1 1 0 00.951-.69l1.519-4.674z" /></svg>
-                       </button>
-                       <input 
-                         value={item.solucao} 
-                         onChange={(e) => updateSolution(item.id, 'solucao', e.target.value)}
-                         className="flex-1 bg-gray-50 p-4 rounded-xl font-bold text-lg focus:bg-white outline-none border border-transparent focus:border-brand"
-                       />
+          <div className="bg-white rounded-[32px] border border-gray-100 shadow-sm overflow-hidden">
+            <div className="divide-y divide-gray-50">
+              {filteredSolutions.map((item) => (
+                <div key={item.id} className="transition-all">
+                  {/* LIST ROW */}
+                  <div 
+                    className={`flex items-center justify-between p-6 hover:bg-gray-50 cursor-pointer transition-colors ${expandedId === item.id ? 'bg-gray-50' : ''}`}
+                    onClick={() => setExpandedId(expandedId === item.id ? null : item.id)}
+                  >
+                    <div className="flex items-center gap-6 flex-1 min-w-0">
+                      <button 
+                        onClick={(e) => { e.stopPropagation(); toggleFavorite(item.id); }}
+                        className={`transition-all ${item.is_favorite ? 'text-amber-500 scale-125' : 'text-gray-200 hover:text-amber-300'}`}
+                      >
+                        ★
+                      </button>
+                      <div className="min-w-0">
+                        <p className="font-black text-lg text-gray-900 truncate tracking-tight">{item.solucao}</p>
+                        <div className="flex gap-2 mt-1">
+                           <span className="px-2 py-0.5 bg-gray-100 text-[8px] font-black uppercase tracking-widest text-gray-500 rounded">{item.categoria}</span>
+                           <span className="px-2 py-0.5 bg-blue-50 text-[8px] font-black uppercase tracking-widest text-blue-500 rounded">{item.maturidade}</span>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    <div className="flex items-center gap-8">
+                      <div className="hidden md:block text-right">
+                         <p className="text-[10px] font-black text-gray-300 uppercase tracking-widest">Fee Base</p>
+                         <p className="text-sm font-bold text-gray-900">{formatCurrency(item.valor_base_num)}</p>
+                      </div>
+                      <div className="w-10 h-10 flex items-center justify-center rounded-full bg-gray-100 text-gray-400 group-hover:bg-black group-hover:text-white transition-all">
+                        <svg className={`w-4 h-4 transition-transform ${expandedId === item.id ? 'rotate-180' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M19 9l-7 7-7-7"/></svg>
+                      </div>
                     </div>
                   </div>
-                  <div className="space-y-2">
-                    <label className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Categoria</label>
-                    <select 
-                      value={item.categoria} 
-                      onChange={(e) => updateSolution(item.id, 'categoria', e.target.value)}
-                      className="w-full bg-gray-50 p-4 rounded-xl font-bold text-sm outline-none border border-transparent focus:border-brand"
-                    >
-                      <option>Direção</option><option>Propagação</option><option>Aceleração</option>
-                    </select>
-                  </div>
-                  <div className="flex items-end gap-2">
-                    <button 
-                      onClick={() => handleMagicFill(item.id)}
-                      disabled={isMagicFilling === item.id}
-                      className="flex-1 bg-amber-50 text-amber-600 border border-amber-100 p-4 rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-amber-100 transition-all"
-                    >
-                      {isMagicFilling === item.id ? 'Gerando...' : '✨ Magic Fill'}
-                    </button>
-                    <button onClick={() => removeSolution(item.id)} className="p-4 bg-red-50 text-red-400 rounded-xl hover:bg-red-500 hover:text-white transition-all">
-                      <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"/></svg>
-                    </button>
-                  </div>
-                </div>
 
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-8 pt-6 border-t border-gray-50">
-                   <div className="space-y-4">
-                      <div className="space-y-2">
-                        <label className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Promessa Principal</label>
-                        <textarea value={item.promessa} onChange={(e) => updateSolution(item.id, 'promessa', e.target.value)} className="w-full bg-gray-50 p-4 rounded-xl font-medium text-sm focus:bg-white outline-none min-h-[80px]" />
-                      </div>
-                      <div className="space-y-2">
-                        <label className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Descrição Técnica</label>
-                        <textarea value={item.descricao} onChange={(e) => updateSolution(item.id, 'descricao', e.target.value)} className="w-full bg-gray-50 p-4 rounded-xl font-medium text-sm focus:bg-white outline-none min-h-[120px]" />
-                      </div>
-                   </div>
-                   <div className="space-y-6">
-                      <div className="grid grid-cols-2 gap-4">
-                        <div className="space-y-2">
-                          <label className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Preço Base (Num)</label>
-                          <input type="number" value={item.valor_base_num} onChange={(e) => updateSolution(item.id, 'valor_base_num', parseFloat(e.target.value))} className="w-full bg-gray-50 p-4 rounded-xl font-bold text-sm" />
+                  {/* EXPANDED CONTENT */}
+                  {expandedId === item.id && (
+                    <div className="p-10 bg-white border-t border-gray-100 animate-in slide-in-from-top-4 duration-300 space-y-10">
+                      <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+                        <div className="md:col-span-2 space-y-4">
+                           <div className="space-y-2">
+                             <label className="text-[9px] font-black text-gray-300 uppercase tracking-widest ml-2">Nome da Solução</label>
+                             <input 
+                               value={item.solucao} 
+                               onChange={(e) => updateSolution(item.id, 'solucao', e.target.value)}
+                               className="w-full bg-gray-50 p-4 rounded-xl font-bold text-lg focus:bg-white outline-none border border-transparent focus:border-brand"
+                             />
+                           </div>
+                           <div className="space-y-2">
+                             <label className="text-[9px] font-black text-gray-300 uppercase tracking-widest ml-2">Promessa Principal</label>
+                             <textarea value={item.promessa} onChange={(e) => updateSolution(item.id, 'promessa', e.target.value)} className="w-full bg-gray-50 p-4 rounded-xl font-medium text-sm focus:bg-white outline-none min-h-[80px]" />
+                           </div>
+                           <div className="space-y-2">
+                             <label className="text-[9px] font-black text-gray-300 uppercase tracking-widest ml-2">Descrição Técnica</label>
+                             <textarea value={item.descricao} onChange={(e) => updateSolution(item.id, 'descricao', e.target.value)} className="w-full bg-gray-50 p-4 rounded-xl font-medium text-sm focus:bg-white outline-none min-h-[120px]" />
+                           </div>
                         </div>
-                        <div className="space-y-2">
-                          <label className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Duração</label>
-                          <select value={item.duracao} onChange={(e) => updateSolution(item.id, 'duracao', e.target.value)} className="w-full bg-gray-50 p-4 rounded-xl font-bold text-sm">
-                            <option>30 dias</option><option>90 dias</option><option>6 meses</option><option>12 meses</option><option>Recorrente</option>
-                          </select>
+
+                        <div className="space-y-6">
+                           <div className="space-y-2">
+                             <label className="text-[9px] font-black text-gray-300 uppercase tracking-widest ml-2">Categoria & Maturidade</label>
+                             <div className="grid grid-cols-2 gap-2">
+                                <select value={item.categoria} onChange={(e) => updateSolution(item.id, 'categoria', e.target.value)} className="bg-gray-50 p-3 rounded-xl font-bold text-xs outline-none">
+                                  <option>Direção</option><option>Propagação</option><option>Aceleração</option>
+                                </select>
+                                <select value={item.maturidade} onChange={(e) => updateSolution(item.id, 'maturidade', e.target.value)} className="bg-gray-50 p-3 rounded-xl font-bold text-xs outline-none">
+                                  <option>Base</option><option>Pro</option><option>Advanced</option>
+                                </select>
+                             </div>
+                           </div>
+                           <div className="grid grid-cols-2 gap-4">
+                              <div className="space-y-2">
+                                <label className="text-[9px] font-black text-gray-300 uppercase tracking-widest ml-2">Preço Base (R$)</label>
+                                <input type="number" value={item.valor_base_num} onChange={(e) => updateSolution(item.id, 'valor_base_num', parseFloat(e.target.value))} className="w-full bg-gray-50 p-4 rounded-xl font-bold text-sm" />
+                              </div>
+                              <div className="space-y-2">
+                                <label className="text-[9px] font-black text-gray-300 uppercase tracking-widest ml-2">Duração</label>
+                                <select value={item.duracao} onChange={(e) => updateSolution(item.id, 'duracao', e.target.value)} className="w-full bg-gray-50 p-4 rounded-xl font-bold text-sm">
+                                  <option>30 dias</option><option>90 dias</option><option>6 meses</option><option>12 meses</option><option>Recorrente</option>
+                                </select>
+                              </div>
+                           </div>
+                           
+                           <div className="space-y-2 bg-gray-50 p-4 rounded-2xl border border-dashed border-gray-200">
+                             <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Variáveis / Adicionais (Upsell)</label>
+                             {item.variaveis_opcionais && item.variaveis_opcionais.length > 0 && (
+                                <div className="space-y-1 mb-3">
+                                   {item.variaveis_opcionais.map((v, idx) => (
+                                      <div key={idx} className="flex justify-between items-center bg-white p-2 rounded-lg border border-gray-100 text-[11px]">
+                                         <span className="font-bold text-gray-600 truncate mr-2">{v.label}</span>
+                                         <div className="flex items-center gap-2 shrink-0">
+                                            <span className="font-mono text-gray-400">{formatCurrency(v.valor)}</span>
+                                            <button onClick={() => handleRemoveVariable(item.id, idx)} className="text-red-400 hover:text-red-600 font-bold px-1">×</button>
+                                         </div>
+                                      </div>
+                                   ))}
+                                </div>
+                             )}
+                             <div className="flex gap-2">
+                                <input placeholder="Nome" value={variableInputs[String(item.id)]?.label || ''} onChange={(e) => setVariableInputs({...variableInputs, [String(item.id)]: {...(variableInputs[String(item.id)]||{label:'',valor:''}), label: e.target.value}})} className="flex-[2] bg-white border border-gray-200 p-2 rounded-lg text-[10px] font-bold outline-none" />
+                                <input type="number" placeholder="Valor" value={variableInputs[String(item.id)]?.valor || ''} onChange={(e) => setVariableInputs({...variableInputs, [String(item.id)]: {...(variableInputs[String(item.id)]||{label:'',valor:''}), valor: e.target.value}})} className="flex-1 bg-white border border-gray-200 p-2 rounded-lg text-[10px] font-bold outline-none" />
+                                <button onClick={() => handleAddVariable(item.id)} className="bg-black text-white px-3 rounded-lg font-black text-xs">+</button>
+                             </div>
+                           </div>
+                        </div>
+
+                        {/* FASES DE ENTREGA (PROJECT PHASES) SECTION */}
+                        <div className="space-y-6">
+                           <div className="flex justify-between items-center">
+                              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-2">Fases de Entrega / Cronograma</label>
+                              <button 
+                                onClick={() => handleGenerateDeliverables(item.id)}
+                                disabled={isGeneratingDeliverables === item.id}
+                                className="text-[8px] font-black text-blue-600 uppercase tracking-widest bg-blue-50 px-2 py-1 rounded-md hover:bg-blue-100 transition-all disabled:opacity-50"
+                              >
+                                {isGeneratingDeliverables === item.id ? 'Gerando...' : '✨ Gerar via IA'}
+                              </button>
+                           </div>
+                           
+                           <div className="bg-gray-50 p-4 rounded-2xl border border-gray-100 min-h-[150px] space-y-3 relative">
+                              <div className="absolute left-7 top-6 bottom-16 w-0.5 bg-gray-200 pointer-events-none"></div>
+                              {item.entregaveis && item.entregaveis.length > 0 ? (
+                                <div className="space-y-3 relative z-10">
+                                   {item.entregaveis.map((task, idx) => (
+                                      <div key={idx} className="flex justify-between items-center bg-white p-3 rounded-xl border border-gray-100 group/task shadow-sm">
+                                         <p className="text-[11px] font-bold text-gray-700 leading-tight flex items-center gap-3">
+                                            <span className="w-5 h-5 rounded-full bg-blue-600 text-white text-[8px] flex items-center justify-center font-black shrink-0">{idx + 1}</span>
+                                            {task}
+                                         </p>
+                                         <button onClick={() => handleRemoveDeliverable(item.id, idx)} className="text-gray-300 hover:text-red-500 opacity-0 group-hover/task:opacity-100 transition-opacity">
+                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12"/></svg>
+                                         </button>
+                                      </div>
+                                   ))}
+                                </div>
+                              ) : (
+                                <p className="text-[10px] italic text-gray-400 text-center py-6">Nenhuma fase definida para este projeto.</p>
+                              )}
+                              
+                              <div className="relative pt-2">
+                                 <input 
+                                   placeholder="Nova fase..." 
+                                   value={deliverableInputs[String(item.id)] || ''}
+                                   onChange={(e) => setDeliverableInputs({...deliverableInputs, [String(item.id)]: e.target.value})}
+                                   onKeyDown={(e) => e.key === 'Enter' && handleAddDeliverable(item.id)}
+                                   className="w-full bg-white border border-gray-200 p-3 rounded-xl text-[11px] font-medium outline-none pr-10"
+                                 />
+                                 <button onClick={() => handleAddDeliverable(item.id)} className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-black transition-colors">
+                                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M12 6v6m0 0v6m0-6h6m-6 0H6"/></svg>
+                                 </button>
+                              </div>
+                           </div>
+
+                           <div className="pt-4 space-y-4">
+                              <button 
+                                onClick={() => handleMagicFill(item.id)}
+                                disabled={isMagicFilling === item.id}
+                                className="w-full bg-amber-50 text-amber-600 border border-amber-100 p-4 rounded-xl text-[9px] font-black uppercase tracking-widest hover:bg-amber-100 transition-all flex items-center justify-center gap-2"
+                              >
+                                {isMagicFilling === item.id ? (
+                                  <>
+                                    <span className="w-3 h-3 border-2 border-amber-600/30 border-t-amber-600 rounded-full animate-spin"></span>
+                                    REFINANDO TUDO...
+                                  </>
+                                ) : '✨ Magic Fill (Promessa, Desc e Fases)'}
+                              </button>
+                              <button onClick={() => removeSolution(item.id)} className="w-full p-4 bg-red-50 text-red-600 rounded-xl font-black text-[9px] uppercase tracking-widest hover:bg-red-500 hover:text-white transition-all">
+                                Remover Solução
+                              </button>
+                           </div>
                         </div>
                       </div>
-                      
-                      {/* VARIAVEIS OPCIONAIS (UPSELL) */}
-                      <div className="space-y-2 bg-gray-50 p-4 rounded-2xl border border-dashed border-gray-200">
-                         <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest block mb-2">Variáveis / Adicionais (Upsell)</label>
-                         
-                         {item.variaveis_opcionais && item.variaveis_opcionais.length > 0 && (
-                            <div className="space-y-2 mb-3">
-                               {item.variaveis_opcionais.map((v, idx) => (
-                                  <div key={idx} className="flex justify-between items-center bg-white p-2 rounded-lg border border-gray-100 text-xs">
-                                     <span className="font-bold text-gray-600">{v.label}</span>
-                                     <div className="flex items-center gap-2">
-                                        <span className="font-mono text-gray-400">{formatCurrency(v.valor)}</span>
-                                        <button onClick={() => handleRemoveVariable(item.id, idx)} className="text-red-400 hover:text-red-600 font-bold px-1">×</button>
-                                     </div>
-                                  </div>
-                               ))}
-                            </div>
-                         )}
-
-                         <div className="flex gap-2">
-                            <input 
-                              placeholder="Ex: Taxa de Setup" 
-                              value={variableInputs[String(item.id)]?.label || ''}
-                              onChange={(e) => updateVariableInput(item.id, 'label', e.target.value)}
-                              className="flex-[2] bg-white border border-gray-200 p-2 rounded-lg text-xs font-bold outline-none focus:border-black"
-                            />
-                            <input 
-                              type="number" 
-                              placeholder="R$ 0" 
-                              value={variableInputs[String(item.id)]?.valor || ''}
-                              onChange={(e) => updateVariableInput(item.id, 'valor', e.target.value)}
-                              className="flex-1 bg-white border border-gray-200 p-2 rounded-lg text-xs font-bold outline-none focus:border-black"
-                            />
-                            <button 
-                              onClick={() => handleAddVariable(item.id)}
-                              className="bg-black text-white px-3 rounded-lg font-black text-xs hover:bg-gray-800"
-                            >
-                              +
-                            </button>
-                         </div>
-                      </div>
-
-                      <div className="space-y-2">
-                        <label className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Dica de Venda</label>
-                        <textarea value={item.dica_venda} onChange={(e) => updateSolution(item.id, 'dica_venda', e.target.value)} className="w-full bg-amber-50/30 p-4 rounded-xl font-medium italic text-sm border border-amber-100/50 min-h-[80px]" />
-                      </div>
-                   </div>
+                    </div>
+                  )}
                 </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </div>
       )}
@@ -639,8 +707,6 @@ const AdminSettings: React.FC = () => {
                         )}
                       </div>
                       <input type="file" ref={systemLogoInputRef} onChange={e => handleLogoUpload(e, 'system')} accept="image/*" className="hidden" />
-                      
-                      {/* URL INPUT FOR SYSTEM LOGO */}
                       <div className="mt-4 flex items-center gap-3">
                           <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest shrink-0">OU URL:</span>
                           <input
@@ -669,8 +735,6 @@ const AdminSettings: React.FC = () => {
                         )}
                       </div>
                       <input type="file" ref={proposalLogoInputRef} onChange={e => handleLogoUpload(e, 'proposal')} accept="image/*" className="hidden" />
-
-                      {/* URL INPUT FOR PROPOSAL LOGO */}
                       <div className="mt-4 flex items-center gap-3">
                           <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest shrink-0">OU URL:</span>
                           <input
@@ -702,7 +766,6 @@ const AdminSettings: React.FC = () => {
                         />
                       </div>
                     </div>
-                    
                     <div className="space-y-4">
                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest ml-4">Preview do Botão</label>
                       <div className="p-4 bg-gray-50 rounded-2xl flex items-center justify-center h-[72px]">
@@ -748,17 +811,14 @@ const AdminSettings: React.FC = () => {
                     <input value={essencia.lema_titulo} onChange={e => setEssencia({...essencia, lema_titulo: e.target.value})} className="w-full bg-gray-50 p-5 rounded-2xl font-black text-lg focus:ring-2 focus:ring-brand outline-none" />
                   </div>
                 </div>
-
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Descrição da Tese</label>
                   <textarea value={essencia.tese_descricao} onChange={e => setEssencia({...essencia, tese_descricao: e.target.value})} className="w-full bg-gray-50 p-5 rounded-2xl font-medium min-h-[100px] focus:ring-2 focus:ring-brand outline-none" />
                 </div>
-
                 <div className="space-y-2">
                   <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Descrição do Lema</label>
                   <textarea value={essencia.lema_descricao} onChange={e => setEssencia({...essencia, lema_descricao: e.target.value})} className="w-full bg-gray-50 p-5 rounded-2xl font-medium min-h-[100px] focus:ring-2 focus:ring-brand outline-none" />
                 </div>
-
                 <div className="pt-10 border-t border-gray-100 flex justify-end">
                    <button onClick={saveEssencia} className="px-12 py-5 bg-black text-white rounded-[30px] font-black text-xs uppercase tracking-[0.2em] shadow-2xl hover:scale-105 transition-all">Salvar Essência</button>
                 </div>
@@ -785,7 +845,6 @@ const AdminSettings: React.FC = () => {
                     placeholder="Defina aqui como a IA deve se comportar..."
                   />
                 </div>
-
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                    <div className="space-y-2">
                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Temperatura ({aiConfig.temperature})</label>
@@ -800,7 +859,6 @@ const AdminSettings: React.FC = () => {
                       <input type="number" value={aiConfig.maxOutputTokens} onChange={e => setAiConfig({...aiConfig, maxOutputTokens: parseInt(e.target.value)})} className="w-full bg-gray-50 p-4 rounded-xl font-bold text-sm" />
                    </div>
                 </div>
-
                 <div className="pt-8 flex justify-end">
                    <button onClick={saveAIConfig} className="px-12 py-5 bg-black text-white rounded-[30px] font-black text-xs uppercase tracking-[0.2em] shadow-2xl hover:scale-105 transition-all">Atualizar Mentor IA</button>
                 </div>
