@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { StorageService, SupabaseService, getAppOrigin, AuthService } from '../services/api';
-import { SolutionItem, SolutionCategory, SolutionSubCategory, SolutionDuration, SolutionMaturity, AIConfig, AppCustomization, MonthlyGoal, SystemConfig } from '../types';
+import { SolutionItem, SolutionCategory, SolutionSubCategory, SolutionDuration, SolutionMaturity, AIConfig, AppCustomization, MonthlyGoal, SystemConfig, ProposalSections } from '../types';
 import { suggestSolutionDetails, parseBulkSolutions, generateSolutionDeliverables } from '../services/gemini';
 import mammoth from 'mammoth';
 
@@ -51,6 +51,8 @@ const AdminSettings: React.FC = () => {
       aiModelImage: 'gemini-3-pro-image-preview',
       aiMaxTokens: 8000,
       aiThinkingBudget: 4000,
+      aiSystemInstruction: "Você é um Sales Manager experiente focado em fechamento de propostas de alto ticket.",
+      aiArchitectInstruction: "Você é um Arquiteto de Soluções comercial. Sua missão é estruturar propostas que unam viabilidade técnica e desejo comercial.",
       driveFolderId: "1-01ahpyVthGXZJNUH5rZCjFKxqCm8sOI",
       syncJobId: "d11a1e38-414b-4c69-bb58-9e655f0e2d29",
       enabledModules: ["dashboard", "copilot", "fichario", "catalogo", "pdf_builder"]
@@ -102,6 +104,13 @@ const AdminSettings: React.FC = () => {
 
   useEffect(() => { loadAllData(); }, [loadAllData]);
 
+  // Preview de cor em tempo real
+  useEffect(() => {
+    if (activeTab === 'system') {
+      document.documentElement.style.setProperty('--brand-primary', appConfig.primaryColor);
+    }
+  }, [appConfig.primaryColor, activeTab]);
+
   const handleSyncSolutions = async () => {
     if (isSyncing) return;
     setIsSyncing(true);
@@ -113,6 +122,63 @@ const AdminSettings: React.FC = () => {
       showToast("Falha na conexão com o servidor", "error");
     } finally {
       setIsSyncing(false);
+    }
+  };
+
+  const handleExportSolutions = () => {
+    if (solutions.length === 0) {
+      showToast("Nenhuma solução para exportar", "error");
+      return;
+    }
+
+    try {
+      const headers = [
+        "ID", "Solução", "Promessa", "Descrição", "Categoria", 
+        "Subcategoria", "Duração", "Maturidade", "Valor Base", 
+        "Diferenciais", "Dica de Venda", "Entregáveis (Fases)", "Opcionais (Upsells)"
+      ];
+
+      const csvRows = [headers.join(';')];
+
+      solutions.forEach(s => {
+        const row = [
+          s.id,
+          s.solucao,
+          s.promessa,
+          s.descricao?.replace(/(\r\n|\n|\r)/gm, " ") || "",
+          s.categoria,
+          s.subcategoria,
+          s.duracao,
+          s.maturidade,
+          s.valor_base_num,
+          (s.diferenciais || []).join(" | "),
+          s.dica_venda?.replace(/(\r\n|\n|\r)/gm, " ") || "",
+          (s.entregaveis || []).join(" | "),
+          (s.variaveis_opcionais || []).map(v => `${v.label} (R$ ${v.valor})`).join(" | ")
+        ];
+        
+        // Tratar aspas e separadores
+        const formattedRow = row.map(val => {
+          const str = String(val).replace(/"/g, '""');
+          return `"${str}"`;
+        });
+
+        csvRows.push(formattedRow.join(';'));
+      });
+
+      const csvString = csvRows.join('\n');
+      const blob = new Blob(["\ufeff" + csvString], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", `Catalogo_Solucoes_PHANTLAB_${new Date().toISOString().slice(0, 10)}.csv`);
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast("Catálogo exportado com sucesso!");
+    } catch (err) {
+      console.error(err);
+      showToast("Erro ao exportar planilha", "error");
     }
   };
 
@@ -291,19 +357,6 @@ const AdminSettings: React.FC = () => {
     }));
   };
 
-  const toggleSolutionTag = (solutionId: string | number, tag: string) => {
-    setSolutions(prev => prev.map(s => {
-      if (s.id === solutionId) {
-        const currentTags = s.tags || [];
-        const nextTags = currentTags.includes(tag) 
-          ? currentTags.filter(t => t !== tag) 
-          : [...currentTags, tag];
-        return { ...s, tags: nextTags };
-      }
-      return s;
-    }));
-  };
-
   const saveCustomization = async () => {
     if (isSyncing) return;
     setIsSyncing(true);
@@ -311,12 +364,14 @@ const AdminSettings: React.FC = () => {
       const res = await SupabaseService.syncAppConfig(appConfig);
       if (res.success) {
         showToast("Governança atualizada!");
-        setTimeout(() => window.location.reload(), 1000);
+        // Não é estritamente necessário recarregar se o estado global for bem gerenciado,
+        // mas garante que o branding aplique em todo lugar.
+        setTimeout(() => window.location.reload(), 800);
       } else {
-        showToast("Erro ao salvar", "error");
+        showToast("Erro ao salvar: " + res.message, "error");
       }
-    } catch {
-      showToast("Falha de rede", "error");
+    } catch (err: any) {
+      showToast("Falha de rede: " + err.message, "error");
     } finally {
       setIsSyncing(false);
     }
@@ -339,18 +394,6 @@ const AdminSettings: React.FC = () => {
     setAppConfig({
       ...appConfig,
       config: { ...appConfig.config, [field]: currentList }
-    });
-  };
-
-  const toggleModule = (moduleId: string) => {
-    if (!appConfig.config) return;
-    const current = appConfig.config.enabledModules || [];
-    const next = current.includes(moduleId) 
-      ? current.filter(id => id !== moduleId) 
-      : [...current, moduleId];
-    setAppConfig({
-      ...appConfig,
-      config: { ...appConfig.config, enabledModules: next }
     });
   };
 
@@ -412,7 +455,7 @@ const AdminSettings: React.FC = () => {
         </div>
       </header>
 
-      {/* RENDER SOLUTIONS TAB */}
+      {/* SOLUTIONS TAB */}
       {activeTab === 'solutions' && (
         <div className="space-y-8 animate-in fade-in slide-in-from-bottom-4 duration-500">
           <div className="flex flex-col md:flex-row gap-4 justify-between items-center bg-white p-8 rounded-[32px] border border-gray-100 shadow-sm">
@@ -427,8 +470,11 @@ const AdminSettings: React.FC = () => {
                <svg className="w-5 h-5 text-gray-400 absolute left-4 top-1/2 -translate-y-1/2" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"/></svg>
             </div>
             
-            <div className="flex gap-3 w-full md:w-auto">
+            <div className="flex flex-wrap gap-3 w-full md:w-auto">
               <button onClick={addSolution} className="flex-1 md:flex-none px-8 py-4 bg-black text-white rounded-2xl font-black text-[10px] uppercase tracking-widest shadow-xl hover:scale-[1.02] active:scale-95 transition-all whitespace-nowrap">+ Nova Solução</button>
+              <button onClick={handleExportSolutions} className="flex-1 md:flex-none px-8 py-4 bg-white border border-gray-100 text-gray-900 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-gray-50 transition-all flex items-center justify-center gap-2 whitespace-nowrap">
+                Exportar Planilha
+              </button>
               <button onClick={() => fileInputRef.current?.click()} disabled={isImporting} className="flex-1 md:flex-none px-8 py-4 bg-white border border-gray-100 text-gray-900 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-gray-50 transition-all flex items-center justify-center gap-2 whitespace-nowrap">
                 {isImporting ? '...' : 'Importar DOCX'}
               </button>
@@ -479,8 +525,6 @@ const AdminSettings: React.FC = () => {
                 {/* Expanded Editor Body */}
                 {expandedId === item.id && (
                   <div className="p-8 md:p-12 bg-white border-t border-gray-100 animate-in fade-in slide-in-from-top-4 duration-500">
-                    
-                    {/* Top Action Bar */}
                     <div className="flex flex-col md:flex-row justify-between items-center mb-12 gap-6 bg-gray-50/50 p-6 rounded-[24px] border border-gray-100">
                       <div className="flex items-center gap-5">
                          <div className="w-12 h-12 bg-black text-white rounded-2xl flex items-center justify-center text-xl shadow-lg">⚡</div>
@@ -508,10 +552,7 @@ const AdminSettings: React.FC = () => {
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-2 gap-10">
-                      
-                      {/* COLUNA ESQUERDA: IDENTIDADE E ESTRATÉGIA */}
                       <div className="space-y-10">
-                        {/* IDENTIDADE */}
                         <div className="bg-white rounded-[32px] border border-gray-100 p-8 space-y-6 shadow-sm">
                           <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest flex items-center gap-2">
                              <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
@@ -545,7 +586,6 @@ const AdminSettings: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* ESTRATÉGIA / ROI */}
                         <div className="bg-white rounded-[32px] border border-gray-100 p-8 space-y-6 shadow-sm">
                           <span className="text-[10px] font-black text-emerald-500 uppercase tracking-widest flex items-center gap-2">
                              <span className="w-1.5 h-1.5 bg-emerald-500 rounded-full"></span>
@@ -569,7 +609,6 @@ const AdminSettings: React.FC = () => {
                                />
                             </div>
                           </div>
-                          
                           <div className="space-y-3">
                             <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Diferenciais Competitivos</label>
                             <div className="flex flex-wrap gap-2 p-4 bg-gray-50 rounded-2xl border border-gray-100">
@@ -582,7 +621,7 @@ const AdminSettings: React.FC = () => {
                                <input 
                                  placeholder="Novo diferencial..." 
                                  value={diferencialInputs[String(item.id)] || ''}
-                                 onChange={(e) => setDiferencialInputs({...diferencialInputs, [String(item.id)]: e.target.value})}
+                                 onChange={(e) => setDeliverableInputs({...deliverableInputs, [String(item.id)]: e.target.value})}
                                  onKeyDown={(e) => e.key === 'Enter' && handleAddDiferencial(item.id)}
                                  className="bg-transparent text-[10px] font-bold outline-none flex-1 min-w-[150px]"
                                />
@@ -591,15 +630,12 @@ const AdminSettings: React.FC = () => {
                         </div>
                       </div>
 
-                      {/* COLUNA DIREITA: COMERCIAL E OPERAÇÕES */}
                       <div className="space-y-10">
-                        {/* COMERCIAL / PRECIFICAÇÃO */}
                         <div className="bg-black text-white rounded-[32px] p-8 space-y-6 shadow-2xl">
                           <span className="text-[10px] font-black text-brand uppercase tracking-widest flex items-center gap-2">
                              <span className="w-1.5 h-1.5 bg-brand rounded-full"></span>
                              Precificação & Taxonomia
                           </span>
-                          
                           <div className="grid grid-cols-2 gap-6">
                             <div className="space-y-1">
                               <label className="text-[9px] font-black text-white/30 uppercase tracking-widest ml-1">Investimento Base</label>
@@ -624,7 +660,6 @@ const AdminSettings: React.FC = () => {
                               </select>
                             </div>
                           </div>
-
                           <div className="space-y-3">
                              <label className="text-[9px] font-black text-white/30 uppercase tracking-widest ml-1">Categorização do Ativo</label>
                              <div className="grid grid-cols-3 gap-3">
@@ -639,7 +674,6 @@ const AdminSettings: React.FC = () => {
                                 </select>
                              </div>
                           </div>
-
                           <div className="space-y-3 pt-2">
                             <label className="text-[9px] font-black text-white/30 uppercase tracking-widest ml-1">Opcionais (Upsells)</label>
                             <div className="space-y-2">
@@ -648,7 +682,7 @@ const AdminSettings: React.FC = () => {
                                      <span className="text-[10px] font-bold text-white/60">{v.label}</span>
                                      <div className="flex items-center gap-3">
                                         <span className="text-[10px] font-black text-brand">{formatCurrency(v.valor)}</span>
-                                        <button onClick={() => handleRemoveVariable(item.id, idx)} className="text-red-400 hover:text-red-500 font-black">×</button>
+                                        <button onClick={() => handleRemoveVariable(item.id, idx)} className="text-red-400 hover:text-red-600 font-black">×</button>
                                      </div>
                                   </div>
                                ))}
@@ -672,13 +706,11 @@ const AdminSettings: React.FC = () => {
                           </div>
                         </div>
 
-                        {/* OPERAÇÕES / CRONOGRAMA */}
                         <div className="bg-white rounded-[32px] border border-gray-100 p-8 space-y-6 shadow-sm">
                           <span className="text-[10px] font-black text-blue-500 uppercase tracking-widest flex items-center gap-2">
                              <span className="w-1.5 h-1.5 bg-blue-500 rounded-full"></span>
                              Entrega & Dicas de Venda
                           </span>
-                          
                           <div className="space-y-3">
                              <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Cronograma (Fases)</label>
                              <div className="space-y-2">
@@ -705,7 +737,6 @@ const AdminSettings: React.FC = () => {
                                 </div>
                              </div>
                           </div>
-
                           <div className="space-y-2">
                             <label className="text-[9px] font-black text-amber-500 uppercase tracking-widest ml-1 italic">Dica de Venda (Pitch)</label>
                             <textarea 
@@ -716,35 +747,16 @@ const AdminSettings: React.FC = () => {
                             />
                           </div>
                         </div>
-
-                        {/* Footer Actions */}
                         <div className="flex gap-4 pt-6">
-                           <button 
-                             onClick={() => removeSolution(item.id)} 
-                             className="flex-1 p-4 bg-red-50 text-red-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all"
-                           >
-                             Excluir da Nuvem
-                           </button>
-                           <button 
-                             onClick={() => setExpandedId(null)} 
-                             className="flex-1 p-4 bg-gray-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all"
-                           >
-                             Fechar Edição
-                           </button>
+                           <button onClick={() => removeSolution(item.id)} className="flex-1 p-4 bg-red-50 text-red-600 rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-red-600 hover:text-white transition-all">Excluir</button>
+                           <button onClick={() => setExpandedId(null)} className="flex-1 p-4 bg-gray-900 text-white rounded-2xl font-black text-[10px] uppercase tracking-widest hover:bg-black transition-all">Fechar</button>
                         </div>
                       </div>
-
                     </div>
                   </div>
                 )}
               </div>
             ))}
-
-            {filteredSolutions.length === 0 && (
-              <div className="py-20 text-center bg-white rounded-[32px] border-2 border-dashed border-gray-100">
-                 <p className="font-black text-gray-300 uppercase tracking-widest text-xs">Nenhuma solução encontrada.</p>
-              </div>
-            )}
           </div>
         </div>
       )}
@@ -780,133 +792,253 @@ const AdminSettings: React.FC = () => {
         </div>
       )}
 
-      {/* SYSTEM TAB */}
+      {/* SYSTEM TAB - PLENAMENTE FUNCIONAL */}
       {activeTab === 'system' && (
-        <div className="max-w-5xl mx-auto space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
-           <div className="app-card p-12 bg-white space-y-16 shadow-2xl rounded-[40px] border border-gray-100">
-              <div className="flex flex-col md:flex-row justify-between items-start border-b border-gray-100 pb-10 gap-6">
-                 <div>
-                    <h2 className="text-4xl font-black text-gray-900 tracking-tighter uppercase italic">Configurações Base</h2>
-                    <p className="text-gray-400 font-bold uppercase text-[10px] tracking-widest mt-1">Personalize a taxonomia e o motor técnico do sistema</p>
-                 </div>
-                 <button onClick={saveCustomization} disabled={isSyncing} className="px-12 py-5 bg-brand text-white rounded-[30px] font-black text-xs uppercase tracking-widest hover:scale-105 transition-all shadow-xl shadow-blue-500/20">
-                   {isSyncing ? 'Sincronizando...' : 'Aplicar Alterações'}
-                 </button>
+        <div className="space-y-12 animate-in fade-in slide-in-from-bottom-4 duration-500">
+          
+          {/* Header de Ação Fixo/Destaque */}
+          <div className="bg-white p-10 rounded-[40px] border border-gray-100 shadow-2xl flex flex-col md:flex-row justify-between items-center gap-8 border-b-4 border-brand">
+             <div className="flex items-center gap-6">
+                <div className="w-16 h-16 bg-brand text-white rounded-[24px] flex items-center justify-center text-3xl shadow-xl shadow-blue-500/20 transition-colors">⚙️</div>
+                <div>
+                  <h2 className="text-4xl font-black text-gray-900 tracking-tighter uppercase italic">Governança do Sistema</h2>
+                  <p className="text-gray-400 font-bold uppercase text-[10px] tracking-[0.2em] mt-1">Central de Comando PhantLab</p>
+                </div>
+             </div>
+             <button 
+               onClick={saveCustomization} 
+               disabled={isSyncing} 
+               className="w-full md:w-auto px-16 py-6 bg-brand text-white rounded-[30px] font-black text-xs uppercase tracking-[0.2em] hover:scale-105 active:scale-95 transition-all shadow-2xl shadow-blue-500/30 flex items-center justify-center gap-3"
+             >
+               {isSyncing ? (
+                 <span className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+               ) : '🚀 Aplicar Configurações'}
+             </button>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+            
+            {/* COLUNA ESQUERDA: BRANDING */}
+            <div className="lg:col-span-4 space-y-8">
+              
+              {/* CARD: IDENTIDADE VISUAL */}
+              <div className="app-card p-8 bg-white space-y-8 border border-gray-100 shadow-sm">
+                <div className="flex items-center gap-3 border-b border-gray-50 pb-4">
+                  <span className="text-xl">🎨</span>
+                  <h3 className="text-lg font-black text-gray-900 tracking-tight">Identidade Visual</h3>
+                </div>
+                
+                <div className="space-y-5">
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Nome da Empresa</label>
+                    <input 
+                      value={appConfig.companyName}
+                      onChange={e => setAppConfig({...appConfig, companyName: e.target.value})}
+                      className="w-full bg-gray-50 border-transparent border focus:border-brand p-4 rounded-xl font-bold text-sm outline-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">URL Logo Sistema (Dark)</label>
+                    <input 
+                      value={appConfig.systemLogoUrl}
+                      onChange={e => setAppConfig({...appConfig, systemLogoUrl: e.target.value})}
+                      className="w-full bg-gray-50 border-transparent border focus:border-brand p-4 rounded-xl font-medium text-xs outline-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">URL Logo Proposta (Light)</label>
+                    <input 
+                      value={appConfig.proposalLogoUrl}
+                      onChange={e => setAppConfig({...appConfig, proposalLogoUrl: e.target.value})}
+                      className="w-full bg-gray-50 border-transparent border focus:border-brand p-4 rounded-xl font-medium text-xs outline-none transition-all"
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Cor Primária (HEX)</label>
+                    <div className="flex gap-3">
+                      <input 
+                        type="color"
+                        value={appConfig.primaryColor}
+                        onChange={e => setAppConfig({...appConfig, primaryColor: e.target.value})}
+                        className="w-12 h-12 rounded-xl cursor-pointer border-none bg-transparent"
+                      />
+                      <input 
+                        value={appConfig.primaryColor}
+                        onChange={e => setAppConfig({...appConfig, primaryColor: e.target.value})}
+                        className="flex-1 bg-gray-50 border-transparent border focus:border-brand p-4 rounded-xl font-mono text-xs outline-none transition-all"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* COLUNA CENTRAL: TAXONOMIA E PROMPTS IA */}
+            <div className="lg:col-span-8 space-y-8">
+              
+              {/* CARD: GOVERNANÇA DE CONTEÚDO */}
+              <div className="app-card p-10 bg-white space-y-10 border border-gray-100 shadow-sm">
+                <div className="flex items-center gap-3 border-b border-gray-50 pb-6">
+                  <span className="text-2xl">📁</span>
+                  <h3 className="text-xl font-black text-gray-900 tracking-tight uppercase italic">Governança de Conteúdo</h3>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
+                  <div className="space-y-8">
+                    <div className="space-y-4">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-2">Categorias de Movimento</label>
+                      <div className="flex flex-wrap gap-2 p-5 bg-gray-50 rounded-[24px] border border-gray-100 min-h-[100px]">
+                        {appConfig.config?.categories.map((cat, i) => (
+                          <span key={i} className="px-4 py-2 bg-white border border-gray-100 rounded-xl text-[10px] font-black text-gray-600 flex items-center gap-2 shadow-sm">
+                            {cat}
+                            <button onClick={() => handleRemoveTaxonomy('categories', i)} className="text-red-300 hover:text-red-500 transition-colors">×</button>
+                          </span>
+                        ))}
+                        <input 
+                          placeholder="+ Adicionar" 
+                          className="bg-transparent text-[10px] font-black outline-none w-24 p-2 text-brand placeholder:text-gray-300" 
+                          onKeyDown={e => { if(e.key === 'Enter') { handleAddTaxonomy('categories', e.currentTarget.value); e.currentTarget.value = ''; } }} 
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-4">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-2">Subcategorias de Ativos</label>
+                      <div className="flex flex-wrap gap-2 p-5 bg-gray-50 rounded-[24px] border border-gray-100 min-h-[100px]">
+                        {appConfig.config?.subCategories.map((sc, i) => (
+                          <span key={i} className="px-4 py-2 bg-white border border-gray-100 rounded-xl text-[10px] font-black text-gray-600 flex items-center gap-2 shadow-sm">
+                            {sc}
+                            <button onClick={() => handleRemoveTaxonomy('subCategories', i)} className="text-red-300 hover:text-red-500 transition-colors">×</button>
+                          </span>
+                        ))}
+                        <input 
+                          placeholder="+ Adicionar" 
+                          className="bg-transparent text-[10px] font-black outline-none w-24 p-2 text-brand placeholder:text-gray-300" 
+                          onKeyDown={e => { if(e.key === 'Enter') { handleAddTaxonomy('subCategories', e.currentTarget.value); e.currentTarget.value = ''; } }} 
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="space-y-8">
+                    <div className="space-y-4">
+                      <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-2">Níveis de Maturidade</label>
+                      <div className="flex flex-wrap gap-2 p-5 bg-gray-50 rounded-[24px] border border-gray-100 min-h-[100px]">
+                        {appConfig.config?.maturities.map((m, i) => (
+                          <span key={i} className="px-4 py-2 bg-white border border-gray-100 rounded-xl text-[10px] font-black text-gray-600 flex items-center gap-2 shadow-sm">
+                            {m}
+                            <button onClick={() => handleRemoveTaxonomy('maturities', i)} className="text-red-300 hover:text-red-500 transition-colors">×</button>
+                          </span>
+                        ))}
+                        <input 
+                          placeholder="+ Adicionar" 
+                          className="bg-transparent text-[10px] font-black outline-none w-24 p-2 text-brand placeholder:text-gray-300" 
+                          onKeyDown={e => { if(e.key === 'Enter') { handleAddTaxonomy('maturities', e.currentTarget.value); e.currentTarget.value = ''; } }} 
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-4">
+                      <label className="text-[10px] font-black text-blue-500 uppercase tracking-widest pl-2">Tags Globais (Filtros)</label>
+                      <div className="flex flex-wrap gap-2 p-5 bg-blue-50/30 rounded-[24px] border border-blue-100 min-h-[100px]">
+                        {appConfig.config?.tags.map((tag, i) => (
+                          <span key={i} className="px-4 py-2 bg-white border border-blue-200 rounded-xl text-[10px] font-black text-blue-600 flex items-center gap-2 shadow-sm">
+                            #{tag}
+                            <button onClick={() => handleRemoveTaxonomy('tags', i)} className="text-blue-300 hover:text-blue-600 transition-colors">×</button>
+                          </span>
+                        ))}
+                        <input 
+                          placeholder="+ Tag..." 
+                          className="bg-transparent text-[10px] font-black outline-none w-24 p-2 text-blue-400 placeholder:text-blue-200" 
+                          onKeyDown={e => { if(e.key === 'Enter') { handleAddTaxonomy('tags', e.currentTarget.value); e.currentTarget.value = ''; } }} 
+                        />
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </div>
 
-              {/* 1. Módulos Ativos */}
-              <section className="space-y-8">
-                 <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-black text-white rounded-2xl flex items-center justify-center text-xl shadow-lg">🧩</div>
-                    <h3 className="text-2xl font-black text-gray-900 uppercase tracking-tighter italic">1. Gestão de Módulos</h3>
-                 </div>
-                 <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-                    {['dashboard', 'copilot', 'fichario', 'catalogo', 'pdf_builder'].map(m => {
-                       const isActive = appConfig.config?.enabledModules.includes(m);
-                       return (
-                          <button key={m} onClick={() => toggleModule(m)} className={`p-8 rounded-[32px] border flex flex-col items-center gap-4 transition-all ${isActive ? 'bg-black text-white border-black shadow-xl' : 'bg-gray-50 text-gray-400 border-transparent hover:bg-gray-100'}`}>
-                             <div className={`w-3 h-3 rounded-full ${isActive ? 'bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]' : 'bg-gray-300'}`}></div>
-                             <span className="text-[10px] font-black uppercase tracking-widest text-center leading-tight">{m.replace('_', ' ')}</span>
-                          </button>
-                       );
-                    })}
-                 </div>
-              </section>
+              {/* CARD: GOVERNANÇA DE IA (PROMPTS) */}
+              <div className="app-card p-10 bg-white space-y-10 border border-gray-100 shadow-sm">
+                <div className="flex items-center gap-3 border-b border-gray-50 pb-6">
+                  <span className="text-2xl">🧠</span>
+                  <h3 className="text-xl font-black text-gray-900 tracking-tight uppercase italic">Cérebro Artificial (Prompts)</h3>
+                </div>
 
-              {/* 2. Taxonomia de Catálogo */}
-              <section className="space-y-10">
-                 <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-blue-50 text-blue-600 rounded-2xl flex items-center justify-center text-xl shadow-lg">📁</div>
-                    <h3 className="text-2xl font-black text-gray-900 uppercase tracking-tighter italic">2. Taxonomia Dinâmica</h3>
-                 </div>
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                    {/* Tags */}
-                    <div className="space-y-4">
-                       <label className="text-[10px] font-black text-blue-500 uppercase tracking-widest pl-2">Tags Globais (Filtros)</label>
-                       <div className="flex flex-wrap gap-2 p-6 bg-blue-50/50 rounded-[32px] border border-blue-100 min-h-[140px]">
-                          {appConfig.config?.tags.map((tag, i) => (
-                             <span key={i} className="px-4 py-2 bg-white border border-blue-200 rounded-xl text-[10px] font-black text-blue-600 flex items-center gap-3 shadow-sm">
-                                #{tag}
-                                <button onClick={() => handleRemoveTaxonomy('tags', i)} className="text-blue-200 hover:text-blue-600 transition-colors">×</button>
-                             </span>
-                          ))}
-                          <input placeholder="Add Tag..." className="bg-transparent text-[10px] font-black outline-none w-24 p-2 text-blue-400 placeholder:text-blue-200" onKeyDown={e => { if(e.key === 'Enter') { handleAddTaxonomy('tags', e.currentTarget.value); e.currentTarget.value = ''; } }} />
-                       </div>
-                    </div>
-                    {/* Maturidades */}
-                    <div className="space-y-4">
-                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-2">Níveis de Maturidade</label>
-                       <div className="flex flex-wrap gap-2 p-6 bg-gray-50 rounded-[32px] border border-gray-100 min-h-[140px]">
-                          {appConfig.config?.maturities.map((m, i) => (
-                             <span key={i} className="px-4 py-2 bg-white border border-gray-200 rounded-xl text-[10px] font-black flex items-center gap-3 shadow-sm">
-                                {m}
-                                <button onClick={() => handleRemoveTaxonomy('maturities', i)} className="text-red-300 hover:text-red-600 transition-colors">×</button>
-                             </span>
-                          ))}
-                          <input placeholder="Add..." className="bg-transparent text-[10px] font-black outline-none w-24 p-2 text-gray-400 placeholder:text-gray-200" onKeyDown={e => { if(e.key === 'Enter') { handleAddTaxonomy('maturities', e.currentTarget.value); e.currentTarget.value = ''; } }} />
-                       </div>
-                    </div>
-                 </div>
-              </section>
+                <div className="space-y-10">
+                   <div className="space-y-3">
+                      <div className="flex justify-between items-center px-2">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Prompt Mestre (Mentor Comercial)</label>
+                        <span className="text-[8px] font-black text-amber-500 uppercase px-2 py-0.5 bg-amber-50 rounded">Altamente Sensível</span>
+                      </div>
+                      <textarea 
+                        value={appConfig.config?.aiSystemInstruction}
+                        onChange={e => setAppConfig({...appConfig, config: { ...appConfig.config!, aiSystemInstruction: e.target.value }})}
+                        placeholder="Instrua o Mentor sobre como se comportar..."
+                        className="w-full bg-gray-900 text-blue-400 p-8 rounded-[32px] font-mono text-[11px] leading-relaxed min-h-[180px] outline-none border border-transparent focus:border-brand shadow-2xl"
+                      />
+                   </div>
 
-              {/* 3. Motor de Inteligência */}
-              <section className="space-y-10 pt-10 border-t border-gray-100">
-                 <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-amber-50 text-amber-600 rounded-2xl flex items-center justify-center text-xl shadow-lg">🧠</div>
-                    <h3 className="text-2xl font-black text-gray-900 uppercase tracking-tighter italic">3. Motor de IA (Técnico)</h3>
-                 </div>
-                 <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-                    <div className="space-y-4">
-                       <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-2">Modelo de Texto Preferencial</label>
-                       <select value={appConfig.config?.aiModelText} onChange={e => setAppConfig({...appConfig, config: { ...appConfig.config!, aiModelText: e.target.value as any }})} className="w-full bg-gray-50 p-5 rounded-2xl font-black text-xs outline-none cursor-pointer hover:bg-gray-100 transition-all">
-                          <option value="gemini-3-pro-preview">Gemini 3 Pro (Full Reason)</option>
-                          <option value="gemini-3-flash-preview">Gemini 3 Flash (High Performance)</option>
-                       </select>
-                    </div>
-                    <div className="grid grid-cols-2 gap-6">
-                        <div className="space-y-4">
-                           <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-2">Max Tokens</label>
-                           <input type="number" value={appConfig.config?.aiMaxTokens} onChange={e => setAppConfig({...appConfig, config: { ...appConfig.config!, aiMaxTokens: parseInt(e.target.value) }})} className="w-full bg-gray-50 p-5 rounded-2xl font-black text-xs outline-none" />
+                   <div className="space-y-3">
+                      <div className="flex justify-between items-center px-2">
+                        <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Prompt do Arquiteto (Gerador de Soluções)</label>
+                        <span className="text-[8px] font-black text-blue-500 uppercase px-2 py-0.5 bg-blue-50 rounded">Lógica Operacional</span>
+                      </div>
+                      <textarea 
+                        value={appConfig.config?.aiArchitectInstruction}
+                        onChange={e => setAppConfig({...appConfig, config: { ...appConfig.config!, aiArchitectInstruction: e.target.value }})}
+                        placeholder="Instrua como a IA deve preencher os detalhes técnicos das novas soluções..."
+                        className="w-full bg-gray-50 text-gray-700 p-8 rounded-[32px] font-mono text-[11px] leading-relaxed min-h-[150px] outline-none border border-transparent focus:border-brand shadow-inner"
+                      />
+                   </div>
+                </div>
+
+                {/* MOTOR TÉCNICO (CONFIGS) */}
+                <div className="pt-10 border-t border-gray-50 grid grid-cols-1 md:grid-cols-2 gap-10">
+                   <div className="space-y-6">
+                      <div className="space-y-1">
+                        <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Modelo de Linguagem (LLM)</label>
+                        <select 
+                          value={appConfig.config?.aiModelText} 
+                          onChange={e => setAppConfig({...appConfig, config: { ...appConfig.config!, aiModelText: e.target.value as any }})} 
+                          className="w-full bg-gray-50 p-4 rounded-xl font-black text-xs outline-none cursor-pointer border border-transparent focus:border-brand"
+                        >
+                          <option value="gemini-3-pro-preview">Gemini 3 Pro (Raciocínio Lento)</option>
+                          <option value="gemini-3-flash-preview">Gemini 3 Flash (Alta Velocidade)</option>
+                        </select>
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                        <div className="space-y-1">
+                           <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Max Tokens</label>
+                           <input type="number" value={appConfig.config?.aiMaxTokens} onChange={e => setAppConfig({...appConfig, config: { ...appConfig.config!, aiMaxTokens: parseInt(e.target.value) }})} className="w-full bg-gray-50 p-4 rounded-xl font-black text-xs outline-none" />
                         </div>
-                        <div className="space-y-4">
-                           <label className="text-[10px] font-black text-gray-400 uppercase tracking-widest pl-2">Thinking Budget</label>
-                           <input type="number" value={appConfig.config?.aiThinkingBudget} onChange={e => setAppConfig({...appConfig, config: { ...appConfig.config!, aiThinkingBudget: parseInt(e.target.value) }})} className="w-full bg-gray-50 p-5 rounded-2xl font-black text-xs outline-none" />
+                        <div className="space-y-1">
+                           <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest ml-1">Thinking Budget</label>
+                           <input type="number" value={appConfig.config?.aiThinkingBudget} onChange={e => setAppConfig({...appConfig, config: { ...appConfig.config!, aiThinkingBudget: parseInt(e.target.value) }})} className="w-full bg-gray-50 p-4 rounded-xl font-black text-xs outline-none" />
                         </div>
-                    </div>
-                 </div>
-              </section>
+                      </div>
+                   </div>
 
-              {/* 4. Auditoria de Status */}
-              <section className="space-y-8 pt-10 border-t border-gray-100">
-                 <div className="flex items-center gap-4">
-                    <div className="w-12 h-12 bg-emerald-50 text-emerald-600 rounded-2xl flex items-center justify-center text-xl shadow-lg">📡</div>
-                    <h3 className="text-2xl font-black text-gray-900 uppercase tracking-tighter italic">4. Infraestrutura PhantLab</h3>
-                 </div>
-                 <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                    <div className="p-8 bg-gray-50 rounded-[32px] flex flex-col justify-between h-40 border border-gray-100">
-                       <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">IA Engine Status</span>
-                       <div className="flex items-center gap-3">
-                          <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]"></div>
-                          <span className="text-xl font-black text-gray-900 uppercase italic">ONLINE</span>
+                   {/* STATUS DA INFRA NO CARD DE IA */}
+                   <div className="bg-gray-50 p-8 rounded-[32px] border border-gray-100 flex flex-col justify-center space-y-4">
+                       <p className="text-[9px] font-black text-gray-300 uppercase tracking-widest text-center">Cloud Health Monitor</p>
+                       <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-gray-500 uppercase">Latency</span>
+                          <span className="text-[10px] font-black text-green-500">24ms</span>
                        </div>
-                    </div>
-                    <div className="p-8 bg-gray-50 rounded-[32px] flex flex-col justify-between h-40 border border-gray-100">
-                       <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Database Sync</span>
-                       <div className="flex items-center gap-3">
-                          <div className="w-3 h-3 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.8)]"></div>
-                          <span className="text-xl font-black text-gray-900 uppercase italic">PROTECTED</span>
+                       <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-gray-500 uppercase">Engine Status</span>
+                          <span className="text-[10px] font-black text-brand">READY</span>
                        </div>
-                    </div>
-                    <div className="p-8 bg-gray-50 rounded-[32px] flex flex-col justify-between h-40 border border-gray-100">
-                       <span className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Workspace API</span>
-                       <div className="flex items-center gap-3">
-                          <div className="w-3 h-3 rounded-full bg-blue-500 shadow-[0_0_10px_rgba(59,130,246,0.8)]"></div>
-                          <span className="text-xl font-black text-gray-900 uppercase italic">CONNECTED</span>
+                       <div className="flex items-center justify-between">
+                          <span className="text-[10px] font-bold text-gray-500 uppercase">Context Window</span>
+                          <span className="text-[10px] font-black text-gray-900">128K OK</span>
                        </div>
-                    </div>
-                 </div>
-              </section>
-           </div>
+                   </div>
+                </div>
+              </div>
+
+            </div>
+
+          </div>
         </div>
       )}
     </div>

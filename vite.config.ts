@@ -13,14 +13,14 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      // Resolve problemas com módulos que esperam APIs do Node
-      'path': 'path-browserify',
+      // FIX: Força o uso da versão de navegador do mammoth para evitar erro de 'path-browserify'
+      'mammoth': 'mammoth/mammoth.browser.js',
     },
   },
   build: {
     rollupOptions: {
-      // Previne que o erro de "createRequire" do node:module quebre o build do Supabase
-      external: ['node:module'],
+      // Previne que imports nativos do Node quebrem o bundle
+      external: ['node:module', 'path', 'fs', 'util'],
     },
   },
 });

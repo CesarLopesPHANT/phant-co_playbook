@@ -4,19 +4,15 @@ import { SolutionItem, AIConfig, UserRole, ProposalRecord, ProposalItem, Proposa
 
 const SUPABASE_URL = 'https://wdatcopytwgykhpqshxa.supabase.co';
 
-// Acesso seguro a variáveis de ambiente definido no vite.config.ts
 const getEnvVar = (key: string): string | undefined => {
   try {
-    // No Vite, as variáveis definidas em 'define' são substituídas como literais
     if (key === 'API_KEY') return process.env.API_KEY;
     if (key === 'NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY') return process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY;
     
-    // Fallback para process.env se disponível
     if (typeof process !== 'undefined' && process.env) {
       return (process.env as any)[key];
     }
   } catch (e) {
-    // ignore error
   }
   return undefined;
 };
@@ -159,48 +155,6 @@ export const SupabaseService = {
       return { success: true };
     } catch (err: any) { return { success: false, message: err.message }; }
   },
-  async fetchEssencia() {
-    try {
-      const { data, error } = await supabase.from('essencia_config').select('content').eq('id', 'main').single();
-      if (error) {
-        const local = localStorage.getItem('phant_essencia_backup');
-        return local ? JSON.parse(local) : null;
-      }
-      return data.content;
-    } catch { return null; }
-  },
-  async syncEssencia(content: any) {
-    try {
-      localStorage.setItem('phant_essencia_backup', JSON.stringify(content));
-      const { error } = await supabase.from('essencia_config').upsert({ id: 'main', content }, { onConflict: 'id' });
-      if (error) throw error;
-      return { success: true };
-    } catch (err: any) { 
-      if (err.code === 'PGRST205' || err.message?.includes('fetch')) return { success: true, warning: 'offline_mode' };
-      return { success: false, message: err.message }; 
-    }
-  },
-  async fetchAIConfig(): Promise<AIConfig | null> {
-    try {
-      const { data, error } = await supabase.from('ai_config').select('content').eq('id', 'mentor').single();
-      if (error) {
-        const local = localStorage.getItem('phant_ai_config_backup');
-        return local ? JSON.parse(local) : null;
-      }
-      return data.content;
-    } catch { return null; }
-  },
-  async syncAIConfig(content: AIConfig) {
-    try {
-      localStorage.setItem('phant_ai_config_backup', JSON.stringify(content));
-      const { error } = await supabase.from('ai_config').upsert({ id: 'mentor', content }, { onConflict: 'id' });
-      if (error) throw error;
-      return { success: true };
-    } catch (err: any) { 
-      if (err.code === 'PGRST205' || err.message?.includes('fetch')) return { success: true, warning: 'offline_mode' };
-      return { success: false }; 
-    }
-  },
   async fetchAppConfig(): Promise<AppCustomization | null> {
     try {
       const { data, error } = await supabase.from('app_config').select('content').eq('id', 'branding').single();
@@ -218,15 +172,10 @@ export const SupabaseService = {
         .from('app_config')
         .upsert({ id: 'branding', content: content }, { onConflict: 'id' });
       
-      if (error) {
-        if (error.code === 'PGRST205' || error.message?.includes('fetch')) {
-            return { success: true, warning: 'Table public.app_config not found or fetch error. Using local storage.' };
-        }
-        return { success: false, message: error.message };
-      }
+      if (error) throw error;
       return { success: true };
     } catch (err: any) { 
-      return { success: false, message: String(err) }; 
+      return { success: false, message: String(err.message || err) }; 
     }
   },
   async fetchGoals(): Promise<MonthlyGoal[]> {
@@ -242,6 +191,26 @@ export const SupabaseService = {
         .from('app_config')
         .upsert({ id: 'sales_goals', content: goals }, { onConflict: 'id' });
       return { success: !error, message: error?.message };
+    } catch (err: any) {
+      return { success: false, message: err.message };
+    }
+  },
+  // Fix: Adding fetchEssencia to SupabaseService
+  async fetchEssencia(): Promise<any | null> {
+    try {
+      const { data, error } = await supabase.from('app_config').select('content').eq('id', 'essencia').single();
+      if (error || !data) return null;
+      return data.content;
+    } catch { return null; }
+  },
+  // Fix: Adding syncEssencia to SupabaseService
+  async syncEssencia(content: any) {
+    try {
+      const { error } = await supabase
+        .from('app_config')
+        .upsert({ id: 'essencia', content: content }, { onConflict: 'id' });
+      if (error) throw error;
+      return { success: true };
     } catch (err: any) {
       return { success: false, message: err.message };
     }
@@ -360,12 +329,10 @@ export const SupabaseService = {
       }]).select().single();
       
       if (error) {
-        console.error("Erro ao criar sessão no Supabase:", error);
-        throw new Error(`Erro DB: ${error.message} (${error.code})`);
+        throw new Error(`Erro DB: ${error.message}`);
       }
       return data;
     } catch (err: any) { 
-      console.error("createAssistSession falhou:", err);
       throw new Error(err.message || "Erro desconhecido ao criar sessão"); 
     }
   },
@@ -404,6 +371,22 @@ export const SupabaseService = {
       if (error) throw error;
       return data || [];
     } catch { return []; }
+  },
+  
+  async fetchAIConfig(): Promise<AIConfig | null> {
+    try {
+      const customization = await this.fetchAppConfig();
+      if (customization?.config) {
+        return {
+          systemInstruction: customization.config.aiSystemInstruction,
+          architectInstruction: customization.config.aiArchitectInstruction,
+          temperature: 0.7,
+          maxOutputTokens: customization.config.aiMaxTokens,
+          thinkingBudget: customization.config.aiThinkingBudget
+        };
+      }
+      return null;
+    } catch { return null; }
   }
 };
 
@@ -436,12 +419,9 @@ export const StorageService = {
           const data = await res.json();
           files = data.files || [];
           success = true;
-        } else {
-          console.warn(`Drive API Error ${res.status}:`, res.statusText);
         }
       }
     } catch (e) {
-      console.warn("Google API Direct Fetch failed, trying fallback...", e);
     }
 
     if (!success) {
@@ -453,12 +433,11 @@ export const StorageService = {
         files = data.files || data.items || [];
         success = true;
       } catch (err: any) { 
-        console.warn("Proxy Drive indisponível ou bloqueado.", err.message);
       }
     }
 
     if (!success) {
-       throw new Error("Não foi possível carregar os arquivos. Verifique a conexão ou faça login novamente.");
+       throw new Error("Não foi possível carregar os arquivos.");
     }
 
     return this.processFiles(files, folderId);

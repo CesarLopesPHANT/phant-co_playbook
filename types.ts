@@ -3,7 +3,7 @@ export type ModuleStatus = 'ATIVA' | 'EM CONSTRUÇÃO' | 'DRAFT' | 'REVIEW' | 'P
 export type SourceType = 'Drive' | 'Manual' | 'IA';
 export type UserRole = 'MASTER' | 'USER';
 
-export type SolutionCategory = string; // Mudado de Union para string para permitir dinamismo
+export type SolutionCategory = string; 
 export type SolutionSubCategory = string;
 export type SolutionDuration = string;
 export type SolutionMaturity = string;
@@ -23,19 +23,15 @@ export interface SolutionItem {
   duracao: SolutionDuration;
   maturidade: SolutionMaturity;
   is_favorite?: boolean; 
-  
-  // Precificação
   fee_mensal: string; 
   valor_base_num: number;
   variaveis_opcionais: PriceOption[]; 
-  
   publico_alvo?: string;
   resultado_esperado?: string;
   diferenciais?: string[]; 
   dica_venda: string;
   link?: string;
   entregaveis?: string[];
-  // Fix: Added missing tags property for SolutionItem
   tags?: string[];
 }
 
@@ -107,15 +103,15 @@ export interface SystemConfig {
   subCategories: string[];
   durations: string[];
   maturities: string[];
-  // Fix: Added missing tags property for SystemConfig
   tags: string[];
   defaultProposalSections: ProposalSections;
-  slaThreshold: number; // Valor de faturamento para lead qualificado
+  slaThreshold: number; 
   aiModelText: 'gemini-3-flash-preview' | 'gemini-3-pro-preview';
   aiModelImage: 'gemini-2.5-flash-image' | 'gemini-3-pro-image-preview';
-  // Fix: Added missing technical and integration configuration properties used in AdminSettings
   aiMaxTokens: number;
   aiThinkingBudget: number;
+  aiSystemInstruction: string; // Prompt mestre do sistema
+  aiArchitectInstruction: string; // Prompt do arquiteto de catálogo
   driveFolderId?: string;
   syncJobId?: string;
   enabledModules: string[];
@@ -126,7 +122,7 @@ export interface AppCustomization {
   systemLogoUrl: string;
   proposalLogoUrl: string;
   primaryColor: string;
-  config?: SystemConfig; // Configurações técnicas integradas
+  config?: SystemConfig; 
 }
 
 export interface PlaybookModule {
