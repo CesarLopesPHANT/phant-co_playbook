@@ -1,18 +1,15 @@
+
 import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { SolutionItem, AIConfig, StrategicMapItem, ProposalMetadata } from "../types";
 import { SupabaseService } from "./api";
 
-// Acesso seguro a variáveis de ambiente definido no vite.config.ts
 const getEnvVar = (key: string): string | undefined => {
   try {
     if (key === 'API_KEY') return process.env.API_KEY;
-    
     if (typeof process !== 'undefined' && process.env) {
       return (process.env as any)[key];
     }
-  } catch (e) {
-    // ignore error
-  }
+  } catch (e) {}
   return undefined;
 };
 
@@ -64,32 +61,24 @@ export const getSalesMentorStream = async (userMessage: string, onChunk: (text: 
     return fullText;
   } catch (error: any) {
     console.error("Gemini Stream Error:", error);
-    if (error.name === 'AbortError' || error.message?.includes('aborted')) {
-      onChunk("A conexão foi interrompida pelo servidor. Por favor, tente novamente.");
-    } else {
-      onChunk("Desculpe, tive um problema ao processar sua solicitação. Verifique sua conexão ou a chave API.");
-    }
+    onChunk("Desculpe, tive um problema ao processar sua solicitação.");
     return "";
   }
 };
 
 export const improveObservationText = async (text: string): Promise<string> => {
   if (!text.trim()) return text;
-  
   try {
     const ai = getAIInstance();
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
       contents: {
-        parts: [{ text: `Você é um refinador de texto executivo de alto nível. Reescreva o texto abaixo para uma proposta comercial, tornando-o profissional e persuasivo. Retorne APENAS o texto refinado, sem comentários extras.\n\nTexto: "${text}"` }]
+        parts: [{ text: `Você é um refinador de texto executivo. Reescreva o texto abaixo para uma proposta comercial, tornando-o profissional e persuasivo. Retorne APENAS o texto refinado.\n\nTexto: "${text}"` }]
       },
-      config: {
-        temperature: 0.2,
-      }
+      config: { temperature: 0.2 }
     });
     return response.text?.trim() || text;
   } catch (error) {
-    console.error("Improve Text Error:", error);
     return text;
   }
 };
@@ -100,9 +89,8 @@ export const generateStrategicMapping = async (metadata: ProposalMetadata): Prom
     const prompt = `
       Analise a empresa ${metadata.clientName} (${metadata.industry}).
       Notas da reunião: Dores: ${metadata.meetingNotesPains}, Desejos: ${metadata.meetingNotesDesires}.
-      
       Crie um Mapeamento Estratégico de "Estado Atual" vs "Estado Desejado".
-      Retorne exatamente 4 pares de impacto em formato JSON.
+      Retorne exatamente 4 pares em formato JSON.
     `;
 
     const response = await ai.models.generateContent({
@@ -127,7 +115,6 @@ export const generateStrategicMapping = async (metadata: ProposalMetadata): Prom
 
     return JSON.parse(response.text || "[]");
   } catch (error) {
-    console.error("Strategic Mapping Error:", error);
     return [];
   }
 };
@@ -135,12 +122,15 @@ export const generateStrategicMapping = async (metadata: ProposalMetadata): Prom
 export const suggestSolutionDetails = async (productName: string): Promise<Partial<SolutionItem>> => {
   try {
     const ai = getAIInstance();
+    const savedConfig = await SupabaseService.fetchAIConfig();
+    
+    const instruction = savedConfig?.architectInstruction || "Você é um Arquiteto de Soluções. Gere detalhes estratégicos e operacionais completos para a solução comercial indicada. Inclua promessa, descrição, público-alvo, resultados e entre 4 a 6 fases de cronograma.";
+
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: { parts: [{ text: `Você é um Arquiteto de Soluções PhantLab. Gere detalhes estratégicos e operacionais para a solução comercial: ${productName}. 
-      As tarefas/entregáveis devem ser pensadas como FASES SEQUENCIAIS de implementação do projeto.
-      Gere entre 4 a 6 fases principais de entrega que compõem o cronograma.` }] },
+      contents: { parts: [{ text: `Solução: ${productName}` }] },
       config: {
+        systemInstruction: instruction,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -148,13 +138,15 @@ export const suggestSolutionDetails = async (productName: string): Promise<Parti
             promessa: { type: Type.STRING },
             descricao: { type: Type.STRING },
             maturidade: { type: Type.STRING },
+            publico_alvo: { type: Type.STRING },
+            resultado_esperado: { type: Type.STRING },
             entregaveis: { 
               type: Type.ARRAY,
               items: { type: Type.STRING },
               description: "Lista de 4 a 6 fases sequenciais do cronograma de entrega técnica."
             }
           },
-          required: ["promessa", "descricao", "maturidade", "entregaveis"]
+          required: ["promessa", "descricao", "maturidade", "publico_alvo", "resultado_esperado", "entregaveis"]
         }
       }
     });
@@ -167,10 +159,15 @@ export const suggestSolutionDetails = async (productName: string): Promise<Parti
 export const generateSolutionDeliverables = async (productName: string, description: string = ""): Promise<string[]> => {
   try {
     const ai = getAIInstance();
+    const savedConfig = await SupabaseService.fetchAIConfig();
+    
+    const instruction = savedConfig?.architectInstruction || "Você é um Gerente de Operações. Com base na solução comercial e descrição, gere uma lista de 4 a 8 FASES SEQUENCIAIS de implementação (cronograma de entrega).";
+
     const response = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: { parts: [{ text: `Você é um Gerente de Operações PhantLab. Com base na solução comercial "${productName}" e descrição "${description}", gere uma lista de 4 a 8 FASES SEQUENCIAIS de implementação (cronograma de entrega). Retorne apenas um array JSON de strings.` }] },
+      contents: { parts: [{ text: `Gere o cronograma para: ${productName}. Descrição: ${description}` }] },
       config: {
+        systemInstruction: instruction,
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.ARRAY,
@@ -180,7 +177,6 @@ export const generateSolutionDeliverables = async (productName: string, descript
     });
     return JSON.parse(response.text || "[]");
   } catch (error) {
-    console.error("Deliverables Generation Error:", error);
     return [];
   }
 };
@@ -190,7 +186,7 @@ export const parseBulkSolutions = async (raw: string) => {
     const ai = getAIInstance();
     const res = await ai.models.generateContent({
       model: 'gemini-3-flash-preview',
-      contents: { parts: [{ text: `Extraia as soluções comerciais deste texto e retorne um array JSON: ${raw}` }] },
+      contents: { parts: [{ text: `Extraia as soluções comerciais deste texto e retorne um array JSON com campos: solucao, promessa, descricao, categoria, subcategoria, duracao, maturidade, valor_base_num, publico_alvo, resultado_esperado. Texto: ${raw}` }] },
       config: { responseMimeType: "application/json" }
     });
     return JSON.parse(res.text || "[]");

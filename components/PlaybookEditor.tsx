@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { PlaybookModule, UserRole, SolutionItem, SolutionCategory, SolutionMaturity, ProposalItem, AppCustomization } from '../types';
 import { SupabaseService } from '../services/api';
@@ -76,7 +77,15 @@ const PlaybookEditor: React.FC<PlaybookEditorProps> = ({ module, currentRole, on
       basePrice: item.valor_base_num || 0,
       selectedOptions: [],
       totalPrice: item.valor_base_num || 0,
-      duration: item.duracao
+      duration: item.duracao,
+      description: item.descricao,
+      deliverables: item.entregaveis || [],
+      promessa: item.promessa,
+      category: item.categoria,
+      subCategory: item.subcategoria,
+      maturity: item.maturidade,
+      targetAudience: item.publico_alvo,
+      expectedResult: item.resultado_esperado
     };
     const currentProposal = JSON.parse(localStorage.getItem('phant_current_proposal') || '[]');
     const nextProposal = [...currentProposal, proposalItem];
@@ -91,6 +100,9 @@ const PlaybookEditor: React.FC<PlaybookEditorProps> = ({ module, currentRole, on
     if (cat === 'Aceleração') return 'bg-purple-600';
     return 'bg-gray-500';
   };
+
+  const formatCurrency = (val: number) => 
+    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
 
   // RENDERIZAÇÃO ESPECIAL PARA O BUILDER (LAYOUT INTEGRADO)
   if (module.type === 'pdf_builder') {
@@ -203,7 +215,7 @@ const PlaybookEditor: React.FC<PlaybookEditorProps> = ({ module, currentRole, on
                  <div className="flex justify-between items-end">
                     <div>
                        <span className="block text-[8px] font-black text-gray-300 uppercase tracking-widest mb-1">Fee Mensal Estimado</span>
-                       <span className="text-3xl font-black text-gray-900">{new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(item.valor_base_num)}</span>
+                       <span className="text-3xl font-black text-gray-900">{formatCurrency(item.valor_base_num)}</span>
                     </div>
                  </div>
                  
@@ -231,10 +243,10 @@ const PlaybookEditor: React.FC<PlaybookEditorProps> = ({ module, currentRole, on
         </div>
       )}
 
-      {/* MODAL SIMPLES DE FICHA TÉCNICA */}
+      {/* MODAL DE FICHA TÉCNICA REFINADA */}
       {selectedSolution && (
-        <div className="fixed inset-0 bg-black/90 backdrop-blur-2xl z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300">
-           <div className="bg-white w-full max-w-2xl rounded-[60px] p-16 shadow-2xl relative animate-in zoom-in-95 duration-500">
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-2xl z-[100] flex items-center justify-center p-6 animate-in fade-in duration-300 overflow-y-auto">
+           <div className="bg-white w-full max-w-4xl rounded-[60px] p-8 md:p-16 shadow-2xl relative animate-in zoom-in-95 duration-500 my-auto">
               <button 
                 onClick={() => setSelectedSolution(null)}
                 className="absolute top-10 right-10 w-12 h-12 bg-gray-50 rounded-full flex items-center justify-center hover:bg-black hover:text-white transition-all"
@@ -242,30 +254,70 @@ const PlaybookEditor: React.FC<PlaybookEditorProps> = ({ module, currentRole, on
                 <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12"/></svg>
               </button>
               
-              <div className="space-y-10">
-                 <header className="space-y-4">
+              <div className="grid grid-cols-1 md:grid-cols-12 gap-12">
+                <div className="md:col-span-7 space-y-10">
+                  <header className="space-y-4">
                     <span className={`px-4 py-1 rounded-full text-[9px] font-black text-white uppercase tracking-widest ${getCategoryColor(selectedSolution.categoria)}`}>{selectedSolution.categoria}</span>
                     <h2 className="text-4xl font-black text-gray-900 tracking-tighter leading-none">{selectedSolution.solucao}</h2>
                     <p className="text-xl font-bold text-gray-400 italic">"{selectedSolution.promessa}"</p>
-                 </header>
+                  </header>
 
-                 <div className="space-y-6">
+                  <div className="space-y-8">
                     <div className="space-y-2">
                        <h4 className="text-[10px] font-black text-gray-300 uppercase tracking-widest">Descrição da Entrega</h4>
                        <p className="text-sm text-gray-600 font-medium leading-relaxed">{selectedSolution.descricao || 'Detalhes técnicos em processamento...'}</p>
                     </div>
-                    <div className="p-8 bg-amber-50 rounded-[32px] border border-amber-100 italic">
-                       <h4 className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-3">Dica de Venda {appConfig.companyName}</h4>
-                       <p className="text-sm font-bold text-amber-900/70">"{selectedSolution.dica_venda || 'Foque no ROI imediato e na liberação de tempo do empresário.'}"</p>
-                    </div>
-                 </div>
 
-                 <button 
-                   onClick={() => { addToProposal(selectedSolution); setSelectedSolution(null); }}
-                   className="w-full py-6 bg-black text-white rounded-[30px] font-black text-xs uppercase tracking-[0.2em] shadow-2xl hover:bg-brand transition-all"
-                 >
-                   Adicionar à Proposta Atual
-                 </button>
+                    {selectedSolution.entregaveis && selectedSolution.entregaveis.length > 0 && (
+                      <div className="space-y-4">
+                        <h4 className="text-[10px] font-black text-gray-300 uppercase tracking-widest">Cronograma / Fases</h4>
+                        <div className="space-y-2">
+                          {selectedSolution.entregaveis.map((task, i) => (
+                            <div key={i} className="flex items-center gap-3 p-3 bg-gray-50 rounded-xl border border-gray-100">
+                              <span className="w-6 h-6 bg-black text-white rounded-lg flex items-center justify-center text-[9px] font-black">{i+1}</span>
+                              <span className="text-xs font-bold text-gray-700">{task}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="md:col-span-5 space-y-10 bg-gray-50/50 p-8 rounded-[40px] border border-gray-100">
+                  <div className="space-y-6">
+                    <div className="space-y-1">
+                      <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Investimento Base</span>
+                      <p className="text-3xl font-black text-gray-900">{formatCurrency(selectedSolution.valor_base_num)}</p>
+                    </div>
+
+                    {selectedSolution.variaveis_opcionais && selectedSolution.variaveis_opcionais.length > 0 && (
+                      <div className="space-y-4">
+                        <h4 className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Opcionais e Variáveis</h4>
+                        <div className="space-y-2">
+                          {selectedSolution.variaveis_opcionais.map((v, i) => (
+                            <div key={i} className="flex justify-between items-center p-4 bg-white rounded-2xl border border-gray-100 shadow-sm">
+                              <span className="text-[11px] font-bold text-gray-600">{v.label}</span>
+                              <span className="text-[11px] font-black text-brand">{formatCurrency(v.valor)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="p-8 bg-amber-50 rounded-[32px] border border-amber-100 italic">
+                      <h4 className="text-[10px] font-black text-amber-600 uppercase tracking-widest mb-3">Dica de Venda</h4>
+                      <p className="text-[11px] font-bold text-amber-900/70 leading-relaxed">"{selectedSolution.dica_venda || 'Foque no ROI imediato e na liberação de tempo do empresário.'}"</p>
+                    </div>
+                  </div>
+
+                  <button 
+                    onClick={() => { addToProposal(selectedSolution); setSelectedSolution(null); }}
+                    className="w-full py-6 bg-black text-white rounded-[30px] font-black text-xs uppercase tracking-[0.2em] shadow-2xl hover:bg-brand transition-all"
+                  >
+                    Adicionar à Proposta
+                  </button>
+                </div>
               </div>
            </div>
         </div>

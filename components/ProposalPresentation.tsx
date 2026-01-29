@@ -7,7 +7,6 @@ interface ProposalPresentationProps {
   items: ProposalItem[];
   strategicMap: StrategicMapItem[];
   appConfig: AppCustomization;
-  // onClose removido pois abrirá em nova aba
   selectedSections?: ProposalSections;
 }
 
@@ -30,7 +29,6 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
   const formatCurrency = (val: number) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
   
-  // Default to all true if not provided (backward compatibility)
   const sections = selectedSections || { cover: true, strategicMap: true, tacticalScope: true, finalInvestment: true, backCover: true };
 
   return (
@@ -64,12 +62,9 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
           scroll-snap-align: start;
           position: relative;
         }
-        /* Esconde scrollbar mas permite scroll */
         ::-webkit-scrollbar { width: 0px; }
       `}</style>
 
-      {/* FIXED HEADER - Removed Navigation/Close Button for New Tab View */}
-      
       <div className="presentation-bg">
         {/* SLIDE 1: CAPA */}
         {sections.cover && (
@@ -129,88 +124,91 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
           </section>
         )}
 
-        {/* SLIDE 3: O MÉTODO (3 MOVIMENTOS) */}
-        {sections.tacticalScope && (
-          <section id="method" className="relative overflow-hidden">
-            <div className="max-w-7xl mx-auto w-full space-y-24">
-              <div className="text-center space-y-6">
-                <h2 className="text-6xl md:text-[7rem] font-black tracking-tighter uppercase italic leading-none">
-                  Os 3 Movimentos <br/> <span className="text-purple-600">da Phant.</span>
-                </h2>
-                <p className="text-xl text-white/40 max-w-2xl mx-auto font-medium">Aceleramos empresas através de um ecossistema de inteligência.</p>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-12">
-                {[
-                  { t: 'DIREÇÃO', s: 'A Tese', c: '#00B884', d: 'Alinhamento intelectual e clareza de rumo para o decisor.' },
-                  { t: 'PROPAGAÇÃO', s: 'O Ativo', c: '#0095FF', d: 'Materialização da tese em canais e infraestrutura digital.' },
-                  { t: 'ACELERAÇÃO', s: 'A Escala', c: '#7C3AED', d: 'Execução agressiva e monetização através de tecnologia e IA.' }
-                ].map((m, i) => (
-                  <div key={i} className="p-12 bg-white/5 border border-white/10 rounded-[50px] space-y-8 group hover:border-purple-500/50 transition-all">
-                      <div className="w-20 h-20 rounded-3xl flex items-center justify-center text-white text-3xl font-black shadow-2xl group-hover:scale-110 transition-transform" style={{ backgroundColor: m.c }}>
-                        0{i+1}
-                      </div>
-                      <div className="space-y-4">
-                        <h3 className="text-3xl font-black italic tracking-tighter" style={{ color: m.c }}>{m.t}</h3>
-                        <p className="text-white/80 font-bold uppercase text-xs tracking-widest">{m.s}</p>
-                        <p className="text-white/40 leading-relaxed font-medium">{m.d}</p>
-                      </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </section>
-        )}
-
-        {/* SLIDE 4: ESCOPO TÁTICO (OFFER) */}
-        {sections.tacticalScope && (
-          <section id="scope" className="bg-[#0a0a0a]">
-            <div className="max-w-7xl mx-auto w-full space-y-20">
-              <div className="flex flex-col md:flex-row md:items-end justify-between gap-10">
-                  <div className="space-y-6">
-                    <h2 className="text-6xl md:text-8xl font-black tracking-tighter uppercase italic leading-none text-gradient">
-                      Nossa <br/> <span className="text-white">Entrega.</span>
+        {/* SLIDES DE FICHA TÉCNICA (UM POR ITEM) */}
+        {sections.tacticalScope && items.map((item, i) => (
+          <section key={item.instanceId} className="bg-[#0a0a0a] overflow-hidden">
+            <div className="max-w-7xl mx-auto w-full space-y-16">
+              
+              <div className="grid grid-cols-1 lg:grid-cols-12 gap-16 items-start">
+                {/* Coluna Esquerda: Hook & Promessa */}
+                <div className="lg:col-span-5 space-y-10">
+                  <div className="space-y-4">
+                    <div className="flex flex-wrap items-center gap-4">
+                      <span className="px-4 py-1 bg-purple-600 text-white text-[10px] font-black rounded-full uppercase tracking-widest">{item.category || 'Solução'}</span>
+                      <span className="px-4 py-1 bg-white/10 text-white/60 text-[10px] font-black rounded-full uppercase tracking-widest">{item.subCategory || 'Estratégia'}</span>
+                      <span className="text-[10px] font-black text-white/30 uppercase tracking-[0.3em]">{item.duration}</span>
+                    </div>
+                    <h2 className="text-6xl md:text-8xl font-black tracking-tighter uppercase leading-[0.85] italic">
+                      {item.name}
                     </h2>
-                    <p className="text-xl text-white/40 max-w-xl font-medium">Ações concretas para tirar a sua empresa da inércia.</p>
                   </div>
-                  <div className="text-right pb-4">
-                    <p className="text-[10px] font-black uppercase tracking-widest text-purple-400 mb-2">Projeto de Impacto</p>
-                    <p className="text-4xl font-black text-white">{items.length} Soluções Integradas</p>
-                  </div>
-              </div>
 
-              <div className="space-y-8">
-                  {items.map((item, i) => (
-                    <div key={i} className="flex flex-col md:flex-row gap-10 p-10 bg-white/[0.03] border border-white/5 rounded-[40px] hover:bg-white/[0.05] transition-all">
-                      <div className="md:w-1/3 space-y-4">
-                          <span className="text-[10px] font-black uppercase tracking-widest px-4 py-1 bg-purple-600 rounded-full">{item.duration}</span>
-                          <h3 className="text-3xl font-black italic tracking-tighter uppercase">{item.name}</h3>
+                  <div className="p-10 bg-white/5 border-l-4 border-purple-600 rounded-r-[40px] relative overflow-hidden group">
+                    <div className="absolute -right-8 -bottom-8 text-8xl opacity-5 group-hover:scale-110 transition-transform">✨</div>
+                    <p className="text-2xl md:text-3xl font-black text-purple-400 leading-tight italic tracking-tight">
+                      "{item.promessa || "Uma nova fronteira de resultados para sua operação."}"
+                    </p>
+                  </div>
+
+                  <div className="space-y-6 pt-4">
+                    <div className="grid grid-cols-2 gap-4">
+                      <div className="p-4 bg-white/[0.03] rounded-2xl border border-white/5">
+                        <span className="text-[9px] font-black uppercase text-white/30 block mb-1">Fee Base</span>
+                        <p className="text-xl font-black text-white">{formatCurrency(item.basePrice)}</p>
                       </div>
-                      <div className="md:w-2/3 grid grid-cols-1 md:grid-cols-2 gap-10 border-l border-white/10 pl-0 md:pl-10">
-                          <div className="space-y-4">
-                            <h4 className="text-[10px] font-black uppercase tracking-widest text-white/30">A Estratégia</h4>
-                            <p className="text-sm text-white/60 font-medium leading-relaxed">{item.description || "Implementação tática para ganho de market share imediato."}</p>
-                          </div>
-                          <div className="space-y-4">
-                            <h4 className="text-[10px] font-black uppercase tracking-widest text-white/30">Principais Marcos</h4>
-                            <ul className="space-y-2">
-                              {(item.deliverables || ['Setup Tecnológico', 'Validado em Campo', 'Relatório de ROAS']).map((d, idx) => (
-                                <li key={idx} className="flex items-center gap-3 text-xs font-bold">
-                                  <span className="w-1.5 h-1.5 rounded-full bg-purple-500"></span>
-                                  {d}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
+                      <div className="p-4 bg-purple-600/10 rounded-2xl border border-purple-500/20">
+                        <span className="text-[9px] font-black uppercase text-purple-400 block mb-1">Maturidade</span>
+                        <p className="text-xl font-black text-white uppercase">{item.maturity || 'Base'}</p>
                       </div>
                     </div>
-                  ))}
+                  </div>
+                </div>
+
+                {/* Coluna Direita: Detalhamento Técnico & Opcionais */}
+                <div className="lg:col-span-7 space-y-12">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-12">
+                    <div className="space-y-6">
+                      <h4 className="text-[11px] font-black uppercase tracking-[0.4em] text-white/30">Fases do Cronograma</h4>
+                      <div className="space-y-3">
+                          {(item.deliverables && item.deliverables.length > 0 ? item.deliverables : ['Setup de Inteligência', 'Análise de Ativos', 'Implementação']).map((phase, pIdx) => (
+                            <div key={pIdx} className="flex items-center gap-4 group">
+                              <div className="w-6 h-6 rounded-lg bg-purple-600 text-white font-black text-[10px] flex items-center justify-center shrink-0">
+                                {pIdx + 1}
+                              </div>
+                              <p className="text-sm font-bold text-white/60 group-hover:text-white transition-colors">{phase}</p>
+                            </div>
+                          ))}
+                      </div>
+                    </div>
+
+                    {item.selectedOptions && item.selectedOptions.length > 0 && (
+                      <div className="space-y-6">
+                        <h4 className="text-[11px] font-black uppercase tracking-[0.4em] text-white/30">Opcionais Selecionados</h4>
+                        <div className="space-y-3">
+                          {item.selectedOptions.map((opt, oIdx) => (
+                            <div key={oIdx} className="p-4 bg-white/[0.02] border border-white/5 rounded-2xl flex justify-between items-center">
+                              <span className="text-[11px] font-bold text-white/60">{opt.label}</span>
+                              <span className="text-[11px] font-black text-purple-400">+{formatCurrency(opt.valor)}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="space-y-4 pt-8 border-t border-white/10">
+                    <h4 className="text-[11px] font-black uppercase tracking-[0.4em] text-white/30">Visão Geral da Operação</h4>
+                    <p className="text-lg font-medium text-white/60 leading-relaxed italic">
+                      {item.description || "Implementação tática focada em remover fricções comerciais e escalar a autoridade da marca no ambiente digital."}
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
           </section>
-        )}
+        ))}
 
-        {/* SLIDE 5: INVESTIMENTO & FECHAMENTO */}
+        {/* SLIDE: INVESTIMENTO & FECHAMENTO */}
         {sections.finalInvestment && (
           <section id="closing" className="relative">
             <div className="absolute inset-0 overflow-hidden pointer-events-none">
@@ -247,7 +245,6 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
                       >
                         ACEITAR PROPOSTA
                       </button>
-                      {/* BOTAO REVISAR DADOS REMOVIDO */}
                   </div>
                 </div>
 
@@ -263,7 +260,6 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
         {sections.backCover && (
           <section id="back-cover" className="relative flex flex-col justify-between">
             <div className="absolute inset-0 bg-black z-0">
-               {/* Pattern overlay */}
                <svg width="100%" height="100%" className="absolute inset-0 pointer-events-none opacity-[0.05]">
                 <pattern id="phant-text-pres" x="0" y="0" width="200" height="100" patternUnits="userSpaceOnUse">
                   <text x="10" y="60" fontFamily="Inter" fontWeight="900" fontSize="40" fill="white">PHANT</text>
@@ -273,12 +269,10 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
             </div>
             
             <div className="relative z-10 max-w-7xl mx-auto w-full h-full flex flex-col justify-between py-12">
-               {/* Top: Logo */}
                <div>
                   <img src={PHANT_LOGO_URL} alt="Phant" className="h-16 opacity-80" />
                </div>
 
-               {/* Center: Statement */}
                <div className="space-y-8">
                   <p className="text-xs font-black uppercase tracking-[0.5em] text-white/40">Manifesto</p>
                   <h2 className="text-7xl md:text-9xl font-black tracking-tighter uppercase leading-[0.9]">
@@ -289,7 +283,6 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
                   </p>
                </div>
 
-               {/* Bottom: Contact */}
                <div className="flex flex-col md:flex-row justify-between items-end border-t border-white/10 pt-12">
                    <div className="space-y-4">
                       <p className="text-[10px] font-black uppercase tracking-[0.5em] text-white/40">Fale Conosco</p>

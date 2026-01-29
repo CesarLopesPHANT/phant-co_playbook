@@ -127,7 +127,12 @@ export const SupabaseService = {
          console.warn("Aviso fetchSolutions:", error.message);
          return [];
       }
-      return (data || []).map(item => ({ ...item, id: String(item.id), variaveis_opcionais: Array.isArray(item.variaveis_opcionais) ? item.variaveis_opcionais : [] }));
+      return (data || []).map(item => ({ 
+        ...item, 
+        id: String(item.id), 
+        variaveis_opcionais: Array.isArray(item.variaveis_opcionais) ? item.variaveis_opcionais : [],
+        entregaveis: Array.isArray(item.entregaveis) ? item.entregaveis : []
+      }));
     } catch (err) { 
       console.error("Erro fatal fetchSolutions:", err);
       return []; 
@@ -146,6 +151,7 @@ export const SupabaseService = {
         maturidade: s.maturidade, 
         valor_base_num: s.valor_base_num, 
         variaveis_opcionais: s.variaveis_opcionais,
+        entregaveis: s.entregaveis || [],
         is_favorite: s.is_favorite 
       }));
       const { error } = await supabase.from('solutions').upsert(payload, { onConflict: 'id' });

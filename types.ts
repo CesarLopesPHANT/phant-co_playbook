@@ -1,11 +1,12 @@
+
 export type ModuleStatus = 'ATIVA' | 'EM CONSTRUÇÃO' | 'DRAFT' | 'REVIEW' | 'PUBLISHED' | 'ARCHIVED';
 export type SourceType = 'Drive' | 'Manual' | 'IA';
 export type UserRole = 'MASTER' | 'USER';
 
-export type SolutionCategory = 'Direção' | 'Propagação' | 'Aceleração';
-export type SolutionSubCategory = 'Marca & Cultura' | 'Crescimento (Growth)' | 'Tecnologia' | 'Cursos & Mentorias';
-export type SolutionDuration = '30 dias' | '90 dias' | '6 meses' | '12 meses' | 'Recorrente';
-export type SolutionMaturity = 'Base' | 'Pro' | 'Advanced';
+export type SolutionCategory = string; // Mudado de Union para string para permitir dinamismo
+export type SolutionSubCategory = string;
+export type SolutionDuration = string;
+export type SolutionMaturity = string;
 
 export interface PriceOption {
   label: string;
@@ -34,6 +35,8 @@ export interface SolutionItem {
   dica_venda: string;
   link?: string;
   entregaveis?: string[];
+  // Fix: Added missing tags property for SolutionItem
+  tags?: string[];
 }
 
 export interface ProposalItem {
@@ -46,6 +49,12 @@ export interface ProposalItem {
   duration: string;
   description?: string;
   deliverables?: string[];
+  promessa?: string;
+  category?: string;
+  subCategory?: string; 
+  maturity?: string; 
+  targetAudience?: string; 
+  expectedResult?: string; 
 }
 
 export interface StrategicMapItem {
@@ -84,13 +93,32 @@ export interface ProposalSections {
   cover: boolean;
   strategicMap: boolean;
   tacticalScope: boolean;
-  finalInvestment: boolean; // Utilizado para controlar a página final ou seção de investimento
-  backCover: boolean; // Nova seção de encerramento/contato
+  finalInvestment: boolean;
+  backCover: boolean;
 }
 
 export interface MonthlyGoal {
-  month: string; // Formato "YYYY-MM"
+  month: string; 
   target: number;
+}
+
+export interface SystemConfig {
+  categories: string[];
+  subCategories: string[];
+  durations: string[];
+  maturities: string[];
+  // Fix: Added missing tags property for SystemConfig
+  tags: string[];
+  defaultProposalSections: ProposalSections;
+  slaThreshold: number; // Valor de faturamento para lead qualificado
+  aiModelText: 'gemini-3-flash-preview' | 'gemini-3-pro-preview';
+  aiModelImage: 'gemini-2.5-flash-image' | 'gemini-3-pro-image-preview';
+  // Fix: Added missing technical and integration configuration properties used in AdminSettings
+  aiMaxTokens: number;
+  aiThinkingBudget: number;
+  driveFolderId?: string;
+  syncJobId?: string;
+  enabledModules: string[];
 }
 
 export interface AppCustomization {
@@ -98,6 +126,7 @@ export interface AppCustomization {
   systemLogoUrl: string;
   proposalLogoUrl: string;
   primaryColor: string;
+  config?: SystemConfig; // Configurações técnicas integradas
 }
 
 export interface PlaybookModule {
@@ -125,12 +154,11 @@ export interface ChatMessage {
 
 export interface AIConfig {
   systemInstruction: string;
+  architectInstruction?: string;
   temperature: number;
   maxOutputTokens: number;
   thinkingBudget: number;
 }
-
-// --- FICHARIO TYPES ---
 
 export interface FicharioFolder {
   id: string;
@@ -141,7 +169,7 @@ export interface FicharioFolder {
 }
 
 export interface FicharioFile {
-  id: string; // drive_file_id
+  id: string; 
   name: string;
   type: string;
   url: string;
@@ -152,8 +180,6 @@ export interface FicharioFile {
   previewUrl: string;
   downloadUrl: string;
 }
-
-// --- COPILOT TYPES ---
 
 export interface ScriptPhase {
   id: string;
@@ -192,7 +218,7 @@ export interface TranscriptSegment {
 
 export interface CopilotState {
   currentPhaseIndex: number;
-  checklist: Record<string, boolean>; // phaseId_checkIndex -> true
+  checklist: Record<string, boolean>; 
   transcript: TranscriptSegment[];
   suggestions: string[];
   isRecording: boolean;
