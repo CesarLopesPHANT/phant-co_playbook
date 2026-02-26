@@ -110,6 +110,7 @@ export interface SystemConfig {
   aiModelImage: 'gemini-2.5-flash-image' | 'gemini-3-pro-image-preview';
   aiMaxTokens: number;
   aiThinkingBudget: number;
+  geminiApiKey?: string;
   aiSystemInstruction: string; // Prompt mestre do sistema
   aiArchitectInstruction: string; // Prompt do arquiteto de catálogo
   driveFolderId?: string;

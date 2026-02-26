@@ -237,7 +237,7 @@ const SalesDashboard: React.FC = () => {
                 <ResponsiveContainer width="100%" height="100%" minHeight={80}>
                   <AreaChart data={SALES_PERFORMANCE}>
                     <Area type="monotone" dataKey="leads" stroke="#2563eb" strokeWidth={3} fill="#2563eb" fillOpacity={0.05} />
-                    <Tooltip hide />
+                    <Tooltip content={() => null} />
                   </AreaChart>
                 </ResponsiveContainer>
              </div>

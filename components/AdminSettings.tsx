@@ -1015,6 +1015,23 @@ const AdminSettings: React.FC = () => {
                            <input type="number" value={appConfig.config?.aiThinkingBudget} onChange={e => setAppConfig({...appConfig, config: { ...appConfig.config!, aiThinkingBudget: parseInt(e.target.value) }})} className="w-full bg-gray-50 p-4 rounded-xl font-black text-xs outline-none" />
                         </div>
                       </div>
+
+                      <div className="space-y-1 pt-2">
+                        <label className="text-[9px] font-black text-brand uppercase tracking-widest ml-1">Gemini API Key (Análise de Proposta)</label>
+                        <div className="relative">
+                          <input 
+                            type="password" 
+                            value={appConfig.config?.geminiApiKey || ''} 
+                            onChange={e => setAppConfig({...appConfig, config: { ...appConfig.config!, geminiApiKey: e.target.value }})} 
+                            placeholder="AIzaSy..."
+                            className="w-full bg-white border border-brand/20 p-4 pr-12 rounded-xl font-mono text-xs outline-none focus:border-brand shadow-sm"
+                          />
+                          <div className="absolute right-4 top-1/2 -translate-y-1/2 text-brand opacity-50">
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"/></svg>
+                          </div>
+                        </div>
+                        <p className="text-[8px] font-bold text-gray-400 uppercase tracking-widest mt-1 ml-1">Esta chave será usada para as análises estratégicas e geração de propostas.</p>
+                      </div>
                    </div>
 
                    {/* STATUS DA INFRA NO CARD DE IA */}

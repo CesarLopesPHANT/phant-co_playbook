@@ -7,6 +7,7 @@ export default defineConfig({
   define: {
     // Injeta as variáveis de ambiente necessárias conforme as instruções
     'process.env.API_KEY': JSON.stringify(process.env.API_KEY),
+    'process.env.GEMINI_API_KEY': JSON.stringify(process.env.GEMINI_API_KEY),
     'process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY': JSON.stringify(process.env.NEXT_PUBLIC_SUPABASE_PUBLISHABLE_DEFAULT_KEY),
     // Polyfill básico para 'global'
     'global': 'window',
