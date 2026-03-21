@@ -45,7 +45,8 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
     consultant: 'Estrategista PhantLab',
     headline: 'PROPOSTA DE MOVIMENTO ESTRATÉGICO',
     discountType: 'fixed',
-    discountValue: 0
+    discountValue: 0,
+    installments: 1
   });
   
   const [isPreviewReady, setIsPreviewReady] = useState(false);
@@ -89,6 +90,7 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
   }, [subTotal, metadata.discountValue, metadata.discountType]);
 
   const finalTotal = Math.max(0, subTotal - discountAmount);
+  const installmentValue = useMemo(() => finalTotal / (metadata.installments || 1), [finalTotal, metadata.installments]);
 
   const formatCurrency = (val: number) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -239,6 +241,13 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
     const sourceElement = document.getElementById('proposal-pages-container');
     if (!sourceElement) return;
 
+    // Clone the element to manipulate it without affecting the UI
+    const clonedElement = sourceElement.cloneNode(true) as HTMLElement;
+    clonedElement.style.transform = 'none';
+    clonedElement.style.width = '100%';
+    clonedElement.style.minWidth = 'auto';
+    clonedElement.style.minHeight = 'auto';
+
     const newWindow = window.open('', '_blank');
     if (!newWindow) {
         alert("Pop-up bloqueado. Permita pop-ups para visualizar a proposta.");
@@ -253,7 +262,24 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
             <title>Proposta - ${metadata.clientName}</title>
             <script src="https://cdn.tailwindcss.com"></script>
             <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+            <script>
+                tailwind.config = {
+                    important: true,
+                    theme: {
+                        extend: {
+                            colors: {
+                                brand: '${appConfig.primaryColor}',
+                            }
+                        }
+                    }
+                }
+            </script>
             <style>
+                :root { --brand-primary: ${appConfig.primaryColor}; }
+                .text-brand { color: var(--brand-primary) !important; }
+                .bg-brand { background-color: var(--brand-primary) !important; }
+                .border-brand { border-color: var(--brand-primary) !important; }
+
                 body {
                     font-family: 'Inter', sans-serif;
                     background-color: #1a1a1a;
@@ -262,37 +288,85 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
                     display: flex;
                     justify-content: center;
                     min-height: 100vh;
+                    -webkit-print-color-adjust: exact !important;
+                    print-color-adjust: exact !important;
                 }
                 .proposal-integrity-container {
                     display: flex;
                     flex-direction: column;
                     gap: 40px;
-                    transform: scale(1) !important;
+                    width: 210mm;
+                }
+                #proposal-pages-container {
+                    transform: none !important;
+                    width: 100% !important;
+                    min-width: auto !important;
+                    min-height: auto !important;
+                    display: flex !important;
+                    flex-direction: column !important;
+                    align-items: center !important;
+                    gap: 40px !important;
                 }
                 .printable-page {
-                    width: 210mm;
-                    height: 297mm;
-                    background: white;
-                    position: relative;
-                    overflow: hidden;
-                    box-shadow: 0 0 50px rgba(0,0,0,0.5);
+                    width: 210mm !important;
+                    height: 297mm !important;
+                    min-height: 297mm !important;
+                    max-height: 297mm !important;
+                    background: white !important;
+                    position: relative !important;
+                    overflow: hidden !important;
+                    box-shadow: 0 0 50px rgba(0,0,0,0.5) !important;
+                    flex-shrink: 0 !important;
+                    box-sizing: border-box !important;
+                    margin: 0 auto !important;
                 }
                 @media print {
-                    @page { size: A4; margin: 0; }
-                    body { background: none; padding: 0; }
-                    .proposal-integrity-container { gap: 0; }
+                    @page { 
+                        size: A4; 
+                        margin: 0 !important; 
+                    }
+                    body { 
+                        background: white !important; 
+                        padding: 0 !important; 
+                        margin: 0 !important;
+                    }
+                    .proposal-integrity-container { 
+                        gap: 0 !important; 
+                        width: 210mm !important;
+                        margin: 0 !important;
+                        padding: 0 !important;
+                    }
+                    #proposal-pages-container {
+                        gap: 0 !important;
+                    }
                     .printable-page {
-                        box-shadow: none;
-                        margin: 0;
-                        page-break-after: always;
+                        box-shadow: none !important;
+                        margin: 0 !important;
+                        page-break-after: always !important;
+                        page-break-inside: avoid !important;
+                        width: 210mm !important;
+                        height: 297mm !important;
+                        min-height: 297mm !important;
+                        max-height: 297mm !important;
+                    }
+                    * { 
+                        -webkit-print-color-adjust: exact !important; 
+                        print-color-adjust: exact !important; 
                     }
                 }
             </style>
         </head>
         <body>
             <div class="proposal-integrity-container">
-                ${sourceElement.innerHTML}
+                ${clonedElement.outerHTML}
             </div>
+            <script>
+                window.onload = () => {
+                    setTimeout(() => {
+                        // Opcional: window.print();
+                    }, 500);
+                };
+            </script>
         </body>
         </html>
     `;
@@ -355,7 +429,8 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
       consultant: record.consultant || 'Estrategista PhantLab',
       headline: record.metadata?.headline || 'PROPOSTA DE MOVIMENTO ESTRATÉGICO',
       discountType: record.metadata?.discountType || 'fixed',
-      discountValue: record.metadata?.discountValue || 0
+      discountValue: record.metadata?.discountValue || 0,
+      installments: record.metadata?.installments || 1
     });
     setActiveTab('solutions');
   };
@@ -633,10 +708,10 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
                  />
               </div>
 
-              {/* CAMPO DE DESCONTO SOLICITADO */}
-              <div className="grid grid-cols-2 gap-4 pt-2">
+              {/* CAMPO DE DESCONTO E PARCELAS */}
+              <div className="grid grid-cols-3 gap-2 pt-2">
                 <div className="space-y-1">
-                  <label className="text-[8px] font-black text-white/40 uppercase tracking-widest ml-1">Tipo Desconto</label>
+                  <label className="text-[8px] font-black text-white/40 uppercase tracking-widest ml-1">Tipo</label>
                   <div className="flex bg-white/5 border border-white/10 rounded-xl overflow-hidden p-0.5">
                     <button 
                       onClick={() => setMetadata({...metadata, discountType: 'percentage'})}
@@ -662,15 +737,30 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
                     placeholder="0"
                   />
                 </div>
+                <div className="space-y-1">
+                  <label className="text-[8px] font-black text-white/40 uppercase tracking-widest ml-1">Parcelas</label>
+                  <input 
+                    type="number"
+                    min="1"
+                    value={metadata.installments || 1}
+                    onChange={e => setMetadata({...metadata, installments: parseInt(e.target.value) || 1})}
+                    className="w-full bg-white/5 border border-white/10 p-2 rounded-xl text-[10px] font-black text-white outline-none focus:border-brand h-[34px]"
+                    placeholder="1"
+                  />
+                </div>
               </div>
 
-              <div className="flex justify-between items-end pt-4 border-t border-white/5">
-                  <div className="flex flex-col">
-                      <span className="text-[10px] font-black text-white/30 uppercase tracking-widest">Valor Final</span>
-                      {discountAmount > 0 && <span className="text-[9px] font-bold text-red-400 line-through">{formatCurrency(subTotal)}</span>}
-                  </div>
-                  <span className="text-3xl font-black tracking-tighter text-white">{formatCurrency(finalTotal)}</span>
-              </div>
+                <div className="flex justify-between items-end pt-4 border-t border-white/5">
+                    <div className="flex flex-col">
+                        <span className="text-[10px] font-black text-white/30 uppercase tracking-widest">
+                          {metadata.installments && metadata.installments > 1 ? `${metadata.installments}x de` : 'Valor Final'}
+                        </span>
+                        {discountAmount > 0 && <span className="text-[9px] font-bold text-red-400 line-through">{formatCurrency(subTotal)}</span>}
+                    </div>
+                    <span className="text-3xl font-black tracking-tighter text-white">
+                      {formatCurrency(metadata.installments && metadata.installments > 1 ? installmentValue : finalTotal)}
+                    </span>
+                </div>
               
               <div className="grid grid-cols-2 gap-2">
                 <button onClick={() => saveToCloud(false)} disabled={isSaving} className="w-full py-4 bg-white/10 text-white rounded-[24px] font-black text-[10px] uppercase tracking-[0.2em] hover:bg-white/20 transition-all">
@@ -868,10 +958,19 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
                     <div className="pl-16 pt-8 space-y-6 border-t border-gray-100 mt-auto">
                         <div className="flex justify-between items-end bg-gray-50 p-6 rounded-[24px]">
                             <div className="flex flex-col">
-                               <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest">Investimento Consolidado</span>
-                               <span className="text-[8px] font-bold text-gray-300 uppercase">Proposta Válida por 7 dias</span>
+                               <span className="text-[11px] font-black text-gray-400 uppercase tracking-widest">
+                                 {metadata.installments && metadata.installments > 1 ? `${metadata.installments}x de` : 'Investimento Consolidado'}
+                               </span>
+                               <div className="flex items-center gap-2">
+                                 <span className="text-[8px] font-bold text-gray-300 uppercase">Proposta Válida por 7 dias</span>
+                                 {metadata.installments && metadata.installments > 1 && (
+                                   <span className="text-[8px] font-black text-gray-400 uppercase">Total: {formatCurrency(finalTotal)}</span>
+                                 )}
+                               </div>
                             </div>
-                            <span className="text-5xl font-black text-gray-900 tracking-tighter">{formatCurrency(finalTotal)}</span>
+                            <span className="text-5xl font-black text-gray-900 tracking-tighter">
+                              {formatCurrency(metadata.installments && metadata.installments > 1 ? installmentValue : finalTotal)}
+                            </span>
                         </div>
 
                         {metadata.observations && (

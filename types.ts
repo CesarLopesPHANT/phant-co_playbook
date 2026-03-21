@@ -71,6 +71,7 @@ export interface ProposalMetadata {
   headline?: string;
   discountType?: 'fixed' | 'percentage';
   discountValue?: number;
+  installments?: number;
 }
 
 export interface ProposalRecord {

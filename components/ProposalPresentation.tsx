@@ -25,6 +25,7 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
   }, [subTotal, metadata.discountValue, metadata.discountType]);
 
   const finalTotal = Math.max(0, subTotal - discountAmount);
+  const installmentValue = finalTotal / (metadata.installments || 1);
 
   const formatCurrency = (val: number) => 
     new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
@@ -225,14 +226,21 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
 
                 <div className="p-16 bg-white/[0.03] border-2 border-purple-600/30 rounded-[60px] space-y-12 backdrop-blur-xl">
                   <div className="space-y-4">
-                      <span className="text-xs font-black uppercase tracking-[0.4em] text-white/40">Investimento Estratégico Total</span>
+                      <span className="text-xs font-black uppercase tracking-[0.4em] text-white/40">
+                        {metadata.installments && metadata.installments > 1 ? `${metadata.installments}x de` : 'Investimento Estratégico Total'}
+                      </span>
                       <div className="flex flex-col items-center">
                           {discountAmount > 0 && (
                             <span className="text-xl font-bold text-red-400 line-through decoration-red-400/50 mb-2 opacity-60">
                                 {formatCurrency(subTotal)}
                             </span>
                           )}
-                          <div className="text-7xl md:text-[7rem] font-black tracking-tighter italic">{formatCurrency(finalTotal)}</div>
+                          <div className="text-7xl md:text-[7rem] font-black tracking-tighter italic">
+                            {formatCurrency(metadata.installments && metadata.installments > 1 ? installmentValue : finalTotal)}
+                          </div>
+                          {metadata.installments && metadata.installments > 1 && (
+                            <span className="text-sm font-black text-white/30 uppercase tracking-[0.3em] mt-4">Total: {formatCurrency(finalTotal)}</span>
+                          )}
                       </div>
                       
                       {metadata.observations && <p className="text-white/40 font-medium italic mt-6 max-w-xl mx-auto text-sm leading-relaxed">{metadata.observations}</p>}
