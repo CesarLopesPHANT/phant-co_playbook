@@ -442,7 +442,11 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
                       const logo = brandLogos[b.key];
                       return (
                         <button key={b.key} type="button"
-                          onClick={() => setEditForm({ ...editForm, brands: { ...editForm.brands, [b.key]: { ...editForm.brands?.[b.key], active: !isActive } } })}
+                          onClick={() => {
+                            const currentBrands = editForm.brands || {};
+                            const currentBrand = currentBrands[b.key] || {};
+                            setEditForm({ ...editForm, brands: { ...currentBrands, [b.key]: { ...currentBrand, active: !currentBrand.active } } });
+                          }}
                           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 font-black text-xs uppercase tracking-widest transition-all ${
                             isActive ? `${b.activeBg} text-white border-transparent shadow-lg` : `${b.bg} ${b.border} text-gray-500`
                           }`}>
@@ -636,7 +640,7 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
                     <span className="text-red-600 font-black text-sm">{c.company_name.charAt(0)}</span>
                   </div>
                   <div>
-                    <span className="font-black text-sm text-gray-900 group-hover:text-brand transition-colors inline-flex items-center">{c.company_name}<PhantTag brands={c.brands} logos={brandLogos} /></span>
+                    <span className="font-black text-sm text-gray-900 group-hover:text-brand transition-colors">{c.company_name}</span>
                     <span className="text-[9px] font-bold text-gray-400 block">{c.industry} · {fmt(c.mrr)}</span>
                   </div>
                 </div>
@@ -691,7 +695,7 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
               <tr key={c.id} className={trHover} onClick={() => openDetail(c)}>
                 <td className={`${td} text-gray-400 font-bold`}>{i + 1}</td>
                 <td className="px-4 py-3.5"><BrandDots brands={c.brands} companyLogo={c.company_logo} companyName={c.company_name} logos={brandLogos} /></td>
-                <td className={tdBold}><span className="inline-flex items-center">{c.company_name}<PhantTag brands={c.brands} logos={brandLogos} /></span></td>
+                <td className={tdBold}>{c.company_name}</td>
                 <td className={td}>
                   <span className={`text-[10px] font-black ${c.status === 'active' ? 'text-emerald-600' : 'text-gray-400'}`}>
                     {c.status === 'active' ? 'Ativo' : 'Inativo'}
@@ -763,7 +767,7 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
             {filtered.map(c => (
               <tr key={c.id} className={trHover} onClick={() => openDetail(c)}>
                 <td className="px-4 py-3.5"><BrandDots brands={c.brands} companyLogo={c.company_logo} companyName={c.company_name} logos={brandLogos} /></td>
-                <td className={tdBold}><span className="inline-flex items-center">{c.company_name}<PhantTag brands={c.brands} logos={brandLogos} /></span></td>
+                <td className={tdBold}>{c.company_name}</td>
                 <td className={td}><span className={c.status === 'active' ? 'text-emerald-600 font-bold' : 'text-gray-400'}>{c.status === 'active' ? 'Ativo' : 'Inativo'}</span></td>
                 <td className={`${td} font-bold text-blue-600`}>{c.squad_name || '-'}</td>
                 <td className={td}>{fmtDate(c.contato_trimestre)}</td>

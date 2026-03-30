@@ -429,10 +429,14 @@ export const SupabaseService = {
 
   async saveClient(client: Omit<ClientRecord, 'id' | 'created_at' | 'updated_at'>) {
     try {
-      const { data, error } = await supabase.from('clients').insert([{
-        ...client,
-        updated_at: new Date().toISOString()
-      }]).select().single();
+      const payload: any = { ...client, updated_at: new Date().toISOString() };
+      let { data, error } = await supabase.from('clients').insert([payload]).select().single();
+      // Se falhar por coluna inexistente, remove company_logo e tenta novamente
+      if (error && error.message?.includes('company_logo')) {
+        delete payload.company_logo;
+        const retry = await supabase.from('clients').insert([payload]).select().single();
+        data = retry.data; error = retry.error;
+      }
       if (error) throw error;
       return { success: true, data };
     } catch (err: any) { return { success: false, message: err.message }; }
@@ -441,10 +445,18 @@ export const SupabaseService = {
   async updateClient(id: string, updates: Partial<ClientRecord>) {
     try {
       const { updated_at, created_at, id: _id, ...cleanUpdates } = updates as any;
-      const { error } = await supabase.from('clients').update({
+      const payload: any = {
         ...cleanUpdates,
         updated_at: new Date().toISOString()
-      }).eq('id', id);
+      };
+      // Tenta update completo
+      let { error } = await supabase.from('clients').update(payload).eq('id', id);
+      // Se falhar por coluna inexistente, remove company_logo e tenta novamente
+      if (error && error.message?.includes('company_logo')) {
+        delete payload.company_logo;
+        const retry = await supabase.from('clients').update(payload).eq('id', id);
+        error = retry.error;
+      }
       if (error) throw error;
       return { success: true };
     } catch (err: any) { return { success: false, message: err.message }; }
