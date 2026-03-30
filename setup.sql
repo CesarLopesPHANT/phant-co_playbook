@@ -106,4 +106,120 @@ ALTER TABLE public.app_config ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public access config" ON public.app_config;
 CREATE POLICY "Public access config" ON public.app_config FOR ALL USING (true);
 
-SELECT 'Schema V7 aplicado com sucesso.' as status;
+-- 6. TABELA DE CLIENTES (GESTÃO DE CLIENTES)
+CREATE TABLE IF NOT EXISTS public.clients (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    company_name TEXT NOT NULL,
+    industry TEXT,
+    location TEXT,
+    website TEXT,
+    instagram TEXT,
+    contact JSONB DEFAULT '{}'::jsonb,
+    squad JSONB DEFAULT '[]'::jsonb,
+    brands JSONB DEFAULT '{"phant":{"active":false,"mrr":0,"is_planning":false},"leadbox":{"active":false,"has_propagation":false},"vivemus":{"active":false,"has_consulting":false}}'::jsonb,
+    health TEXT DEFAULT 'care',
+    risk_pillars JSONB DEFAULT '[]'::jsonb,
+    delivery_score NUMERIC DEFAULT 0,
+    churn_status JSONB DEFAULT '{"renewal_date":"","contract_months":12}'::jsonb,
+    mrr NUMERIC DEFAULT 0,
+    financial_history JSONB DEFAULT '[]'::jsonb,
+    upsell_pipeline JSONB DEFAULT '[]'::jsonb,
+    consciousness_level TEXT DEFAULT 'inconsciente',
+    milestones JSONB DEFAULT '[]'::jsonb,
+    last_report_date TIMESTAMP WITH TIME ZONE,
+    intervention_plan TEXT,
+    notes TEXT,
+    status TEXT DEFAULT 'active',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+-- Novos campos V9: Cadastro Geral + Ger. Risco
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='fee') THEN
+    ALTER TABLE public.clients ADD COLUMN fee NUMERIC DEFAULT 0;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='contract_model') THEN
+    ALTER TABLE public.clients ADD COLUMN contract_model TEXT DEFAULT 'Growth';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='squad_name') THEN
+    ALTER TABLE public.clients ADD COLUMN squad_name TEXT DEFAULT '';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='ano_fundacao') THEN
+    ALTER TABLE public.clients ADD COLUMN ano_fundacao TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='receita_anual') THEN
+    ALTER TABLE public.clients ADD COLUMN receita_anual TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='num_funcionarios') THEN
+    ALTER TABLE public.clients ADD COLUMN num_funcionarios TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='data_entrada') THEN
+    ALTER TABLE public.clients ADD COLUMN data_entrada TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='data_onboarding') THEN
+    ALTER TABLE public.clients ADD COLUMN data_onboarding TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='contato_trimestre') THEN
+    ALTER TABLE public.clients ADD COLUMN contato_trimestre TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='assinatura_date') THEN
+    ALTER TABLE public.clients ADD COLUMN assinatura_date TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='churn_date') THEN
+    ALTER TABLE public.clients ADD COLUMN churn_date TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='lt') THEN
+    ALTER TABLE public.clients ADD COLUMN lt NUMERIC;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='nps') THEN
+    ALTER TABLE public.clients ADD COLUMN nps NUMERIC;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='ultima_nota') THEN
+    ALTER TABLE public.clients ADD COLUMN ultima_nota NUMERIC;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='recomendacao') THEN
+    ALTER TABLE public.clients ADD COLUMN recomendacao TEXT;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='health_status') THEN
+    ALTER TABLE public.clients ADD COLUMN health_status TEXT DEFAULT 'care';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='risk_resultado') THEN
+    ALTER TABLE public.clients ADD COLUMN risk_resultado TEXT DEFAULT '';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='risk_entregas') THEN
+    ALTER TABLE public.clients ADD COLUMN risk_entregas TEXT DEFAULT '';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='risk_relacionamento') THEN
+    ALTER TABLE public.clients ADD COLUMN risk_relacionamento TEXT DEFAULT '';
+  END IF;
+END $$;
+
+ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public access clients" ON public.clients;
+CREATE POLICY "Public access clients" ON public.clients FOR ALL USING (true);
+
+-- 7. TABELA DE PLANNING (PIPELINE COMERCIAL)
+CREATE TABLE IF NOT EXISTS public.client_planning (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    client_name TEXT NOT NULL,
+    account TEXT DEFAULT '',
+    produto TEXT DEFAULT '',
+    farmer TEXT DEFAULT '',
+    milestones_triggers TEXT DEFAULT '',
+    consciousness_level TEXT DEFAULT 'inconsciente',
+    previsao_entrada TEXT DEFAULT '',
+    mrr_value NUMERIC DEFAULT 0,
+    one_time_value NUMERIC DEFAULT 0,
+    variavel_value NUMERIC DEFAULT 0,
+    status TEXT DEFAULT 'aguardando',
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+ALTER TABLE public.client_planning ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public access planning" ON public.client_planning;
+CREATE POLICY "Public access planning" ON public.client_planning FOR ALL USING (true);
+
+SELECT 'Schema V9 aplicado com sucesso.' as status;

@@ -15,6 +15,7 @@ interface SidebarProps {
 
 const Sidebar: React.FC<SidebarProps> = ({ modules, selectedModuleId, onSelectModule, currentRole, user, appConfig }) => {
   const [isWorkspaceConnected, setIsWorkspaceConnected] = useState(false);
+  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const categories = ['SISTEMA', 'BASE', 'FERRAMENTAS', 'PRODUTIZACAO'];
   
   const filteredModules = modules.filter(m => m.permissions.includes(currentRole));
@@ -90,20 +91,48 @@ const Sidebar: React.FC<SidebarProps> = ({ modules, selectedModuleId, onSelectMo
               <span className="hidden md:block text-[9px] font-black text-gray-300 uppercase tracking-[0.2em] ml-4 mb-3">
                 {cat === 'BASE' ? 'Fundamentos' : cat === 'PRODUTIZACAO' ? 'Catálogo' : cat === 'FERRAMENTAS' ? 'Operacional' : 'Geral'}
               </span>
-              {catModules.map(m => (
-                <button
-                  key={m.id}
-                  onClick={() => onSelectModule(m.id)}
-                  className={`w-full flex items-center justify-center md:justify-start space-x-3.5 px-4 py-3 rounded-2xl transition-all group ${
-                    selectedModuleId === m.id 
-                      ? 'bg-black text-white shadow-lg'
-                      : 'text-gray-400 hover:bg-gray-50 hover:text-gray-900 hover:text-brand'
-                  }`}
-                >
-                  <AppIcon name={m.icon || 'home'} size={18} className={selectedModuleId === m.id ? '' : 'group-hover:scale-110 transition-transform'} />
-                  <span className="hidden md:block font-bold text-[13px]">{m.title}</span>
-                </button>
-              ))}
+              {catModules.map(m => {
+                if (m.subModules && m.subModules.length > 0) {
+                  return (
+                    <div key={m.id} className="space-y-1">
+                      <button
+                        onClick={() => onSelectModule(m.subModules![0].id)}
+                        className="hidden md:block text-[9px] font-black text-gray-300 uppercase tracking-[0.2em] ml-4 mt-6 mb-3 hover:text-gray-500 transition-colors text-left"
+                      >
+                        {m.title}
+                      </button>
+                      {m.subModules.map(sub => (
+                        <button
+                          key={sub.id}
+                          onClick={() => onSelectModule(sub.id)}
+                          className={`w-full flex items-center justify-center md:justify-start space-x-3.5 px-4 py-3 rounded-2xl transition-all group ${
+                            selectedModuleId === sub.id
+                              ? 'bg-black text-white shadow-lg'
+                              : 'text-gray-400 hover:bg-gray-50 hover:text-gray-900 hover:text-brand'
+                          }`}
+                        >
+                          <AppIcon name={sub.icon || 'home'} size={18} className={selectedModuleId === sub.id ? '' : 'group-hover:scale-110 transition-transform'} />
+                          <span className="hidden md:block font-bold text-[13px]">{sub.title}</span>
+                        </button>
+                      ))}
+                    </div>
+                  );
+                }
+                return (
+                  <button
+                    key={m.id}
+                    onClick={() => onSelectModule(m.id)}
+                    className={`w-full flex items-center justify-center md:justify-start space-x-3.5 px-4 py-3 rounded-2xl transition-all group ${
+                      selectedModuleId === m.id
+                        ? 'bg-black text-white shadow-lg'
+                        : 'text-gray-400 hover:bg-gray-50 hover:text-gray-900 hover:text-brand'
+                    }`}
+                  >
+                    <AppIcon name={m.icon || 'home'} size={18} className={selectedModuleId === m.id ? '' : 'group-hover:scale-110 transition-transform'} />
+                    <span className="hidden md:block font-bold text-[13px]">{m.title}</span>
+                  </button>
+                );
+              })}
             </div>
           );
         })}

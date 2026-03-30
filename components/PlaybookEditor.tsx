@@ -13,6 +13,7 @@ import SLAPage from './SLAPage';
 import PrivacyPolicy from './PrivacyPolicy';
 import TermsOfService from './TermsOfService';
 import CopilotModule from './Assist/CopilotModule';
+import ClientManagement from './ClientManagement';
 
 interface PlaybookEditorProps {
   module: PlaybookModule;
@@ -115,6 +116,16 @@ const PlaybookEditor: React.FC<PlaybookEditorProps> = ({ module, currentRole, on
 
   // MÓDULOS ESPECIAIS
   if (module.type === 'copilot') return <CopilotModule currentRole={currentRole} />;
+  if (module.type === 'client_management') {
+    const viewMap: Record<string, string> = {
+      clientes_dashboard: 'dashboard',
+      clientes_cadastro: 'cadastro',
+      clientes_risco: 'risco',
+      clientes_planning: 'planning',
+      clientes_backlog: 'backlog'
+    };
+    return <ClientManagement currentRole={currentRole} initialView={(viewMap[module.id] || 'dashboard') as any} appConfig={appConfig} />;
+  }
   if (module.type === 'admin') return <AdminSettings />;
   if (module.type === 'dashboard') return <SalesDashboard />;
   if (module.type === 'fichario') return <Fichario currentRole={currentRole} />;

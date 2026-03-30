@@ -141,9 +141,10 @@ export interface PlaybookModule {
   content?: string;
   schema?: string[];
   data?: any[];
+  subModules?: PlaybookModule[];
 }
 
-export type ContentType = 'page' | 'database' | 'template' | 'asset' | 'calculator' | 'script' | 'sla_rule' | 'learning_path' | 'admin' | 'dashboard' | 'fichario' | 'pdf_builder' | 'presentation' | 'copilot';
+export type ContentType = 'page' | 'database' | 'template' | 'asset' | 'calculator' | 'script' | 'sla_rule' | 'learning_path' | 'admin' | 'dashboard' | 'fichario' | 'pdf_builder' | 'presentation' | 'copilot' | 'client_management';
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
@@ -216,8 +217,122 @@ export interface TranscriptSegment {
 
 export interface CopilotState {
   currentPhaseIndex: number;
-  checklist: Record<string, boolean>; 
+  checklist: Record<string, boolean>;
   transcript: TranscriptSegment[];
   suggestions: string[];
   isRecording: boolean;
+}
+
+// ====== GESTÃO DE CLIENTES ======
+
+export type ClientHealthBadge = 'safe' | 'care' | 'danger';
+export type ClientHealthStatus = 'safe' | 'care' | 'danger' | 'churn' | 'implementacao';
+export type ClientBrand = 'phant' | 'leadbox' | 'vivemus';
+export type ConsciousnessLevel = 'inconsciente' | 'consciente_problema' | 'consciente_solucao' | 'consciente_produto' | 'totalmente_consciente';
+export type RiskRating = 'Bom' | 'Normal' | 'Ruim' | 'Implementação' | 'Churn' | '';
+export type PlanningStatus = 'follow_up' | 'aguardando' | 'recusado' | 'fechado';
+
+export interface ClientContact {
+  name: string;
+  email: string;
+  phone: string;
+}
+
+export interface ClientSquadMember {
+  name: string;
+  role: string;
+}
+
+export interface ClientRiskPillar {
+  name: string;
+  score: number;
+  notes?: string;
+}
+
+export interface ClientFinancialMonth {
+  month: string;
+  value: number;
+}
+
+export interface ClientUpsellItem {
+  product: string;
+  status: 'identified' | 'proposed' | 'negotiating' | 'closed';
+  value?: number;
+  notes?: string;
+}
+
+export interface ClientMilestone {
+  title: string;
+  due_date: string;
+  completed: boolean;
+}
+
+export interface ClientRecord {
+  id: string;
+  company_name: string;
+  industry: string;
+  location?: string;
+  website?: string;
+  instagram?: string;
+  contact: ClientContact;
+  squad: ClientSquadMember[];
+  brands: {
+    phant: { active: boolean; mrr: number; is_planning: boolean };
+    leadbox: { active: boolean; has_propagation: boolean };
+    vivemus: { active: boolean; has_consulting: boolean };
+  };
+  health: ClientHealthBadge;
+  health_status: ClientHealthStatus;
+  risk_pillars: ClientRiskPillar[];
+  risk_resultado: RiskRating;
+  risk_entregas: RiskRating;
+  risk_relacionamento: RiskRating;
+  delivery_score: number;
+  churn_status: {
+    renewal_date: string;
+    contract_months: number;
+  };
+  mrr: number;
+  fee: number;
+  contract_model: string;
+  squad_name: string;
+  ano_fundacao?: string;
+  receita_anual?: string;
+  num_funcionarios?: string;
+  data_entrada?: string;
+  data_onboarding?: string;
+  contato_trimestre?: string;
+  assinatura_date?: string;
+  churn_date?: string;
+  lt?: number;
+  nps?: number;
+  ultima_nota?: number;
+  recomendacao?: string;
+  financial_history: ClientFinancialMonth[];
+  upsell_pipeline: ClientUpsellItem[];
+  consciousness_level: ConsciousnessLevel;
+  milestones: ClientMilestone[];
+  last_report_date?: string;
+  intervention_plan?: string;
+  notes?: string;
+  status: 'active' | 'churned' | 'onboarding';
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PlanningItem {
+  id: string;
+  client_name: string;
+  account: string;
+  produto: string;
+  farmer: string;
+  milestones_triggers: string;
+  consciousness_level: ConsciousnessLevel;
+  previsao_entrada: string;
+  mrr_value: number;
+  one_time_value: number;
+  variavel_value: number;
+  status: PlanningStatus;
+  created_at: string;
+  updated_at: string;
 }

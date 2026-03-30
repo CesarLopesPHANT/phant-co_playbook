@@ -4,6 +4,9 @@ import react from '@vitejs/plugin-react';
 
 export default defineConfig({
   plugins: [react()],
+  server: {
+    allowedHosts: true,
+  },
   define: {
     // Injeta as variáveis de ambiente necessárias conforme as instruções
     'process.env.API_KEY': JSON.stringify(process.env.API_KEY),

@@ -5,7 +5,7 @@ import { SolutionItem, SolutionCategory, SolutionSubCategory, SolutionDuration, 
 import { suggestSolutionDetails, parseBulkSolutions, generateSolutionDeliverables } from '../services/gemini';
 import mammoth from 'mammoth';
 
-type AdminTab = 'solutions' | 'metas' | 'system';
+type AdminTab = 'solutions' | 'metas' | 'system' | 'clientes';
 
 const AdminSettings: React.FC = () => {
   const [activeTab, setActiveTab] = useState<AdminTab>('solutions');
@@ -59,6 +59,20 @@ const AdminSettings: React.FC = () => {
     }
   });
 
+  // Client Config State
+  const [clientConfig, setClientConfig] = useState({
+    squads: ['Thiago', 'João', 'Mary', 'Squad 2'],
+    industries: ['Varejo', 'Construtora', 'Construção', 'Educacao', 'Escola de Idiomas', 'Saúde/Clinica', 'Tecnologia', 'Alimentacao', 'Servicos', 'Industria', 'Energia Solar', 'Comunicação Visual', 'Contabilidade', 'Sistemas/ Software\'s', 'Movelaria', 'Psicologia', 'Esquadrias/Vidraçaria', 'Papelaria', 'Gestão Tributaria', 'Barbearia', 'Telecom', 'Engenharia', 'Odontologia', 'Outro'],
+    contractModels: ['Growth', 'Social', 'Branding', 'One Time'],
+    numFuncionarios: ['1-10', '11-50', '51-200', '200+'],
+  });
+  const [newSquad, setNewSquad] = useState('');
+  const [newIndustry, setNewIndustry] = useState('');
+  const [newContractModel, setNewContractModel] = useState('');
+  const [editingSquadIdx, setEditingSquadIdx] = useState<number | null>(null);
+  const [editingSquadName, setEditingSquadName] = useState('');
+  const [squadClientCounts, setSquadClientCounts] = useState<Record<string, number>>({});
+
   const showToast = (message: string, type: 'success' | 'error' = 'success') => {
     setToast({ message, type });
     setTimeout(() => setToast(null), 3000);
@@ -71,6 +85,7 @@ const AdminSettings: React.FC = () => {
       const branding = await SupabaseService.fetchAppConfig().catch(() => null);
       const loadedGoals = await SupabaseService.fetchGoals().catch(() => []);
       const history = await SupabaseService.fetchProposalsHistory().catch(() => []);
+      const allClients = await SupabaseService.fetchClients().catch(() => []);
 
       const realizedMap: Record<string, number> = {};
       history?.forEach(p => {
@@ -81,13 +96,33 @@ const AdminSettings: React.FC = () => {
       });
 
       if (sols) setSolutions(sols);
-      if (branding) setAppConfig(branding);
+      if (branding) {
+        setAppConfig(branding);
+        // Load client config from branding if exists
+        if ((branding as any).clientConfig) {
+          setClientConfig((branding as any).clientConfig);
+        }
+      }
+      // Count clients per squad
+      const counts: Record<string, number> = {};
+      allClients?.forEach((c: any) => {
+        if (c.squad_name) counts[c.squad_name] = (counts[c.squad_name] || 0) + 1;
+      });
+      setSquadClientCounts(counts);
+
       setGoals(generateGoalList(loadedGoals));
       setHistoryRealized(realizedMap);
     } finally {
       setIsInitialLoading(false);
     }
   }, []);
+
+  const saveClientConfig = async () => {
+    const updated = { ...appConfig, clientConfig } as any;
+    const result = await SupabaseService.syncAppConfig(updated);
+    if (result.success) showToast("Configurações de clientes salvas!");
+    else showToast("Erro ao salvar", "error");
+  };
 
   const generateGoalList = (existing: MonthlyGoal[]) => {
     const list = [...existing];
@@ -443,13 +478,13 @@ const AdminSettings: React.FC = () => {
           <p className="text-gray-400 text-xl font-medium tracking-tight">Painel de Controle do Arquiteto</p>
         </div>
         <div className="flex bg-white p-1.5 rounded-2xl shadow-sm border border-gray-100 flex-wrap gap-1">
-          {(['solutions', 'metas', 'system'] as const).map(tab => (
+          {(['solutions', 'metas', 'system', 'clientes'] as const).map(tab => (
             <button
               key={tab}
               onClick={() => setActiveTab(tab)}
               className={`px-6 py-3 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${activeTab === tab ? 'bg-black text-white shadow-lg' : 'text-gray-400 hover:text-black'}`}
             >
-              {tab === 'solutions' ? 'Catálogo' : tab === 'metas' ? 'Metas' : 'Sistema'}
+              {tab === 'solutions' ? 'Catálogo' : tab === 'metas' ? 'Metas' : tab === 'clientes' ? 'Clientes' : 'Sistema'}
             </button>
           ))}
         </div>
@@ -1053,6 +1088,202 @@ const AdminSettings: React.FC = () => {
                 </div>
               </div>
 
+            </div>
+
+          </div>
+        </div>
+      )}
+
+      {/* ============================================================ */}
+      {/* TAB: CLIENTES CONFIG                                          */}
+      {/* ============================================================ */}
+      {activeTab === 'clientes' && (
+        <div className="space-y-8 animate-in fade-in duration-500">
+          <div className="flex items-end justify-between">
+            <div>
+              <h2 className="text-4xl font-black text-gray-900 tracking-tighter uppercase italic">Gestão de Clientes</h2>
+              <p className="text-gray-400 text-sm font-medium mt-1">Squads, indústrias, modelos de contrato e marcas</p>
+            </div>
+            <button onClick={saveClientConfig} className="px-10 py-4 bg-black text-white rounded-[24px] font-black text-[10px] uppercase tracking-widest shadow-xl hover:scale-105 active:scale-95 transition-all">
+              Salvar Configurações
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+
+            {/* SQUADS */}
+            <div className="bg-white rounded-[32px] border border-gray-100 p-8 space-y-5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-blue-50 rounded-xl flex items-center justify-center">
+                  <span className="text-blue-600 font-black text-lg">S</span>
+                </div>
+                <div>
+                  <h3 className="font-black text-lg text-gray-900 tracking-tight">Squads</h3>
+                  <p className="text-[10px] font-bold text-gray-400">Responsáveis pelos clientes</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {clientConfig.squads.map((s, i) => {
+                  const clientCount = squadClientCounts[s] || 0;
+                  const hasClients = clientCount > 0;
+                  return (
+                    <div key={i} className="flex items-center gap-1.5 px-4 py-2 bg-blue-50 rounded-xl border border-blue-100">
+                      {editingSquadIdx === i ? (
+                        <input
+                          autoFocus
+                          value={editingSquadName}
+                          onChange={e => setEditingSquadName(e.target.value)}
+                          onBlur={() => {
+                            if (editingSquadName.trim() && editingSquadName.trim() !== s) {
+                              const updated = [...clientConfig.squads];
+                              updated[i] = editingSquadName.trim();
+                              setClientConfig({ ...clientConfig, squads: updated });
+                            }
+                            setEditingSquadIdx(null);
+                          }}
+                          onKeyDown={e => {
+                            if (e.key === 'Enter') {
+                              if (editingSquadName.trim() && editingSquadName.trim() !== s) {
+                                const updated = [...clientConfig.squads];
+                                updated[i] = editingSquadName.trim();
+                                setClientConfig({ ...clientConfig, squads: updated });
+                              }
+                              setEditingSquadIdx(null);
+                            } else if (e.key === 'Escape') {
+                              setEditingSquadIdx(null);
+                            }
+                          }}
+                          className="w-24 px-2 py-0.5 bg-white rounded-lg text-sm font-bold text-blue-700 outline-none border border-blue-300"
+                        />
+                      ) : (
+                        <button onClick={() => { setEditingSquadIdx(i); setEditingSquadName(s); }}
+                          className="text-sm font-bold text-blue-700 hover:text-blue-900 transition-colors cursor-text" title="Clique para editar">
+                          {s}
+                        </button>
+                      )}
+                      {hasClients ? (
+                        <span title={`${clientCount} cliente(s) atribuído(s) — não é possível excluir`}
+                          className="w-5 h-5 rounded-full bg-blue-100 text-blue-300 flex items-center justify-center text-[8px] font-black cursor-not-allowed">
+                          {clientCount}
+                        </span>
+                      ) : (
+                        <button onClick={() => setClientConfig({ ...clientConfig, squads: clientConfig.squads.filter((_, idx) => idx !== i) })}
+                          className="w-5 h-5 rounded-full bg-blue-100 text-blue-400 flex items-center justify-center hover:bg-red-100 hover:text-red-500 transition-all text-xs font-bold">&times;</button>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <div className="flex gap-2">
+                <input value={newSquad} onChange={e => setNewSquad(e.target.value)} placeholder="Nome do squad..."
+                  onKeyDown={e => { if (e.key === 'Enter' && newSquad.trim()) { setClientConfig({ ...clientConfig, squads: [...clientConfig.squads, newSquad.trim()] }); setNewSquad(''); } }}
+                  className="flex-1 px-4 py-3 bg-gray-50 rounded-xl font-bold text-sm outline-none border-2 border-transparent focus:border-blue-500 transition-colors" />
+                <button onClick={() => { if (newSquad.trim()) { setClientConfig({ ...clientConfig, squads: [...clientConfig.squads, newSquad.trim()] }); setNewSquad(''); } }}
+                  className="px-5 py-3 bg-blue-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-blue-600 transition-all">Adicionar</button>
+              </div>
+            </div>
+
+            {/* MODELOS DE CONTRATO */}
+            <div className="bg-white rounded-[32px] border border-gray-100 p-8 space-y-5">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-violet-50 rounded-xl flex items-center justify-center">
+                  <span className="text-violet-600 font-black text-lg">M</span>
+                </div>
+                <div>
+                  <h3 className="font-black text-lg text-gray-900 tracking-tight">Modelos de Contrato</h3>
+                  <p className="text-[10px] font-bold text-gray-400">Tipos de contrato disponíveis</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {clientConfig.contractModels.map((m, i) => (
+                  <div key={i} className="flex items-center gap-1.5 px-4 py-2 bg-violet-50 rounded-xl border border-violet-100">
+                    <span className="text-sm font-bold text-violet-700">{m}</span>
+                    <button onClick={() => setClientConfig({ ...clientConfig, contractModels: clientConfig.contractModels.filter((_, idx) => idx !== i) })}
+                      className="w-5 h-5 rounded-full bg-violet-100 text-violet-400 flex items-center justify-center hover:bg-red-100 hover:text-red-500 transition-all text-xs font-bold">&times;</button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input value={newContractModel} onChange={e => setNewContractModel(e.target.value)} placeholder="Novo modelo..."
+                  onKeyDown={e => { if (e.key === 'Enter' && newContractModel.trim()) { setClientConfig({ ...clientConfig, contractModels: [...clientConfig.contractModels, newContractModel.trim()] }); setNewContractModel(''); } }}
+                  className="flex-1 px-4 py-3 bg-gray-50 rounded-xl font-bold text-sm outline-none border-2 border-transparent focus:border-violet-500 transition-colors" />
+                <button onClick={() => { if (newContractModel.trim()) { setClientConfig({ ...clientConfig, contractModels: [...clientConfig.contractModels, newContractModel.trim()] }); setNewContractModel(''); } }}
+                  className="px-5 py-3 bg-violet-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-violet-600 transition-all">Adicionar</button>
+              </div>
+            </div>
+
+            {/* INDÚSTRIAS */}
+            <div className="bg-white rounded-[32px] border border-gray-100 p-8 space-y-5 lg:col-span-2">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-emerald-50 rounded-xl flex items-center justify-center">
+                  <span className="text-emerald-600 font-black text-lg">I</span>
+                </div>
+                <div>
+                  <h3 className="font-black text-lg text-gray-900 tracking-tight">Indústrias / Setores</h3>
+                  <p className="text-[10px] font-bold text-gray-400">{clientConfig.industries.length} setores cadastrados</p>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {clientConfig.industries.map((ind, i) => (
+                  <div key={i} className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-50 rounded-lg border border-emerald-100">
+                    <span className="text-[11px] font-bold text-emerald-700">{ind}</span>
+                    <button onClick={() => setClientConfig({ ...clientConfig, industries: clientConfig.industries.filter((_, idx) => idx !== i) })}
+                      className="w-4 h-4 rounded-full bg-emerald-100 text-emerald-400 flex items-center justify-center hover:bg-red-100 hover:text-red-500 transition-all text-[10px] font-bold">&times;</button>
+                  </div>
+                ))}
+              </div>
+              <div className="flex gap-2">
+                <input value={newIndustry} onChange={e => setNewIndustry(e.target.value)} placeholder="Nova indústria / setor..."
+                  onKeyDown={e => { if (e.key === 'Enter' && newIndustry.trim()) { setClientConfig({ ...clientConfig, industries: [...clientConfig.industries, newIndustry.trim()] }); setNewIndustry(''); } }}
+                  className="flex-1 px-4 py-3 bg-gray-50 rounded-xl font-bold text-sm outline-none border-2 border-transparent focus:border-emerald-500 transition-colors" />
+                <button onClick={() => { if (newIndustry.trim()) { setClientConfig({ ...clientConfig, industries: [...clientConfig.industries, newIndustry.trim()] }); setNewIndustry(''); } }}
+                  className="px-5 py-3 bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all">Adicionar</button>
+              </div>
+            </div>
+
+            {/* MARCAS / BRANDS */}
+            <div className="bg-white rounded-[32px] border border-gray-100 p-8 space-y-5 lg:col-span-2">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 bg-gray-100 rounded-xl flex items-center justify-center">
+                  <span className="text-gray-600 font-black text-lg">B</span>
+                </div>
+                <div>
+                  <h3 className="font-black text-lg text-gray-900 tracking-tight">Marcas (Brands)</h3>
+                  <p className="text-[10px] font-bold text-gray-400">Cada cliente pode pertencer a uma ou mais marcas</p>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="p-5 bg-purple-50 rounded-2xl border border-purple-100 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center text-white font-black text-sm shadow-lg">P</div>
+                    <div>
+                      <span className="font-black text-purple-700 text-sm">Phant</span>
+                      <span className="text-[9px] font-bold text-purple-400 block">Marca principal</span>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-purple-600/70 font-medium leading-relaxed">Agência de marketing digital. Clientes com serviços de Growth, Social, Branding.</p>
+                </div>
+                <div className="p-5 bg-blue-50 rounded-2xl border border-blue-100 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-black text-sm shadow-lg">L</div>
+                    <div>
+                      <span className="font-black text-blue-700 text-sm">Leadbox</span>
+                      <span className="text-[9px] font-bold text-blue-400 block">Produto de propagação</span>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-blue-600/70 font-medium leading-relaxed">Plataforma de geração e gestão de leads com automação de marketing.</p>
+                </div>
+                <div className="p-5 bg-emerald-50 rounded-2xl border border-emerald-100 space-y-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 bg-emerald-600 rounded-full flex items-center justify-center text-white font-black text-sm shadow-lg">V</div>
+                    <div>
+                      <span className="font-black text-emerald-700 text-sm">Vivemus</span>
+                      <span className="text-[9px] font-bold text-emerald-400 block">Consultoria e direção</span>
+                    </div>
+                  </div>
+                  <p className="text-[10px] text-emerald-600/70 font-medium leading-relaxed">Consultoria estratégica e direção criativa para posicionamento de marca.</p>
+                </div>
+              </div>
             </div>
 
           </div>

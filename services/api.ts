@@ -1,6 +1,6 @@
 
 import { createClient } from '@supabase/supabase-js';
-import { SolutionItem, AIConfig, UserRole, ProposalRecord, ProposalItem, ProposalMetadata, AppCustomization, MonthlyGoal, AssistSession, FicharioFolder } from '../types';
+import { SolutionItem, AIConfig, UserRole, ProposalRecord, ProposalItem, ProposalMetadata, AppCustomization, MonthlyGoal, AssistSession, FicharioFolder, ClientRecord, PlanningItem } from '../types';
 
 const SUPABASE_URL = 'https://wdatcopytwgykhpqshxa.supabase.co';
 
@@ -387,6 +387,107 @@ export const SupabaseService = {
       }
       return null;
     } catch { return null; }
+  },
+
+  // ====== GESTÃO DE CLIENTES ======
+  async fetchClients(): Promise<ClientRecord[]> {
+    try {
+      const { data, error } = await supabase.from('clients').select('*').order('company_name', { ascending: true });
+      if (error) { console.warn("Aviso fetchClients:", error.message); return []; }
+      return (data || []).map(item => ({
+        ...item,
+        contact: item.contact || {},
+        squad: item.squad || [],
+        brands: item.brands ? { phant: { active: false, mrr: 0, is_planning: false, ...item.brands.phant }, leadbox: { active: false, has_propagation: false, ...item.brands.leadbox }, vivemus: { active: false, has_consulting: false, ...item.brands.vivemus } } : { phant: { active: true, mrr: 0, is_planning: false }, leadbox: { active: false, has_propagation: false }, vivemus: { active: false, has_consulting: false } },
+        risk_pillars: item.risk_pillars || [],
+        financial_history: item.financial_history || [],
+        upsell_pipeline: item.upsell_pipeline || [],
+        milestones: item.milestones || [],
+        churn_status: item.churn_status || { renewal_date: '', contract_months: 12 },
+        fee: item.fee || 0,
+        contract_model: item.contract_model || 'Growth',
+        squad_name: item.squad_name || '',
+        health_status: item.health_status || item.health || 'care',
+        risk_resultado: item.risk_resultado || '',
+        risk_entregas: item.risk_entregas || '',
+        risk_relacionamento: item.risk_relacionamento || '',
+        lt: item.lt || undefined,
+        nps: item.nps || undefined,
+        ultima_nota: item.ultima_nota || undefined,
+        recomendacao: item.recomendacao || ''
+      }));
+    } catch (err) { console.error("Erro fatal fetchClients:", err); return []; }
+  },
+
+  async saveClient(client: Omit<ClientRecord, 'id' | 'created_at' | 'updated_at'>) {
+    try {
+      const { data, error } = await supabase.from('clients').insert([{
+        ...client,
+        updated_at: new Date().toISOString()
+      }]).select().single();
+      if (error) throw error;
+      return { success: true, data };
+    } catch (err: any) { return { success: false, message: err.message }; }
+  },
+
+  async updateClient(id: string, updates: Partial<ClientRecord>) {
+    try {
+      const { updated_at, created_at, id: _id, ...cleanUpdates } = updates as any;
+      const { error } = await supabase.from('clients').update({
+        ...cleanUpdates,
+        updated_at: new Date().toISOString()
+      }).eq('id', id);
+      if (error) throw error;
+      return { success: true };
+    } catch (err: any) { return { success: false, message: err.message }; }
+  },
+
+  async deleteClient(id: string) {
+    try {
+      const { error } = await supabase.from('clients').delete().eq('id', id);
+      if (error) throw error;
+      return { success: true };
+    } catch (err: any) { return { success: false, message: err.message }; }
+  },
+
+  // ====== PLANNING (PIPELINE) ======
+  async fetchPlanning(): Promise<PlanningItem[]> {
+    try {
+      const { data, error } = await supabase.from('client_planning').select('*').order('created_at', { ascending: false });
+      if (error) { console.warn("Aviso fetchPlanning:", error.message); return []; }
+      return data || [];
+    } catch (err) { console.error("Erro fatal fetchPlanning:", err); return []; }
+  },
+
+  async savePlanning(item: Omit<PlanningItem, 'id' | 'created_at' | 'updated_at'>) {
+    try {
+      const { data, error } = await supabase.from('client_planning').insert([{
+        ...item,
+        updated_at: new Date().toISOString()
+      }]).select().single();
+      if (error) throw error;
+      return { success: true, data };
+    } catch (err: any) { return { success: false, message: err.message }; }
+  },
+
+  async updatePlanning(id: string, updates: Partial<PlanningItem>) {
+    try {
+      const { updated_at, created_at, id: _id, ...cleanUpdates } = updates as any;
+      const { error } = await supabase.from('client_planning').update({
+        ...cleanUpdates,
+        updated_at: new Date().toISOString()
+      }).eq('id', id);
+      if (error) throw error;
+      return { success: true };
+    } catch (err: any) { return { success: false, message: err.message }; }
+  },
+
+  async deletePlanning(id: string) {
+    try {
+      const { error } = await supabase.from('client_planning').delete().eq('id', id);
+      if (error) throw error;
+      return { success: true };
+    } catch (err: any) { return { success: false, message: err.message }; }
   }
 };
 

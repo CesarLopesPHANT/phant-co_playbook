@@ -304,7 +304,8 @@ FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
     );
   }
 
-  const selectedModule = PLAYBOOK_STRUCTURE.find(m => m.id === selectedModuleId);
+  const selectedModule = PLAYBOOK_STRUCTURE.find(m => m.id === selectedModuleId)
+    || PLAYBOOK_STRUCTURE.flatMap(m => m.subModules || []).find(sub => sub.id === selectedModuleId);
 
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">

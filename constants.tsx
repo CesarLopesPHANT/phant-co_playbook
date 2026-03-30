@@ -125,6 +125,80 @@ export const PLAYBOOK_STRUCTURE: PlaybookModule[] = [
     data: [] 
   },
   {
+    id: 'clientes',
+    category: 'SISTEMA',
+    title: 'Gestão de Clientes',
+    description: 'Visão 360° dos seus clientes: saúde, financeiro, risco e expansão.',
+    status: 'ATIVA',
+    version: '1.0',
+    source: 'Manual',
+    type: 'client_management',
+    icon: 'clients',
+    permissions: ['MASTER', 'USER'],
+    subModules: [
+      {
+        id: 'clientes_dashboard',
+        category: 'SISTEMA',
+        title: 'Dashboard',
+        description: 'Painel de indicadores e saúde da carteira.',
+        status: 'ATIVA',
+        version: '1.0',
+        source: 'Manual',
+        type: 'client_management',
+        icon: 'home',
+        permissions: ['MASTER', 'USER']
+      },
+      {
+        id: 'clientes_cadastro',
+        category: 'SISTEMA',
+        title: 'Cadastro Geral',
+        description: 'Base de dados completa dos clientes.',
+        status: 'ATIVA',
+        version: '1.0',
+        source: 'Manual',
+        type: 'client_management',
+        icon: 'clients',
+        permissions: ['MASTER', 'USER']
+      },
+      {
+        id: 'clientes_risco',
+        category: 'SISTEMA',
+        title: 'Ger. Risco',
+        description: 'Gerenciamento de risco e saúde dos clientes.',
+        status: 'ATIVA',
+        version: '1.0',
+        source: 'Manual',
+        type: 'client_management',
+        icon: 'shield',
+        permissions: ['MASTER', 'USER']
+      },
+      {
+        id: 'clientes_planning',
+        category: 'SISTEMA',
+        title: 'Planning',
+        description: 'Pipeline comercial e oportunidades.',
+        status: 'ATIVA',
+        version: '1.0',
+        source: 'Manual',
+        type: 'client_management',
+        icon: 'target',
+        permissions: ['MASTER', 'USER']
+      },
+      {
+        id: 'clientes_backlog',
+        category: 'SISTEMA',
+        title: 'Backlog Receita',
+        description: 'Previsão de receita por período.',
+        status: 'ATIVA',
+        version: '1.0',
+        source: 'Manual',
+        type: 'client_management',
+        icon: 'chart',
+        permissions: ['MASTER', 'USER']
+      }
+    ]
+  },
+  {
     id: 'admin',
     category: 'SISTEMA',
     title: 'Configurações',
