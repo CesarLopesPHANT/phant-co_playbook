@@ -422,7 +422,10 @@ export const SupabaseService = {
         nps: item.nps || undefined,
         ultima_nota: item.ultima_nota || undefined,
         recomendacao: item.recomendacao || '',
-        company_logo: item.company_logo || ''
+        company_logo: item.company_logo || '',
+        cnpj: item.cnpj || '',
+        assinatura_descricao: item.assinatura_descricao || '',
+        forma_pagamento: item.forma_pagamento || ''
       }));
     } catch (err) { console.error("Erro fatal fetchClients:", err); return []; }
   },
@@ -431,9 +434,9 @@ export const SupabaseService = {
     try {
       const payload: any = { ...client, updated_at: new Date().toISOString() };
       let { data, error } = await supabase.from('clients').insert([payload]).select().single();
-      // Se falhar por coluna inexistente, remove company_logo e tenta novamente
-      if (error && error.message?.includes('company_logo')) {
-        delete payload.company_logo;
+      // Se falhar por coluna inexistente, remove colunas novas e tenta novamente
+      if (error && (error.message?.includes('company_logo') || error.message?.includes('cnpj') || error.message?.includes('assinatura_descricao') || error.message?.includes('forma_pagamento') || error.code === '42703')) {
+        delete payload.company_logo; delete payload.cnpj; delete payload.assinatura_descricao; delete payload.forma_pagamento;
         const retry = await supabase.from('clients').insert([payload]).select().single();
         data = retry.data; error = retry.error;
       }
@@ -451,9 +454,9 @@ export const SupabaseService = {
       };
       // Tenta update completo
       let { error } = await supabase.from('clients').update(payload).eq('id', id);
-      // Se falhar por coluna inexistente, remove company_logo e tenta novamente
-      if (error && error.message?.includes('company_logo')) {
-        delete payload.company_logo;
+      // Se falhar por coluna inexistente, remove colunas novas e tenta novamente
+      if (error && (error.message?.includes('company_logo') || error.message?.includes('cnpj') || error.message?.includes('assinatura_descricao') || error.message?.includes('forma_pagamento') || error.code === '42703')) {
+        delete payload.company_logo; delete payload.cnpj; delete payload.assinatura_descricao; delete payload.forma_pagamento;
         const retry = await supabase.from('clients').update(payload).eq('id', id);
         error = retry.error;
       }

@@ -310,6 +310,9 @@ export interface ClientRecord {
   ultima_nota?: number;
   recomendacao?: string;
   company_logo?: string;
+  cnpj?: string;
+  assinatura_descricao?: string;
+  forma_pagamento?: string;
   financial_history: ClientFinancialMonth[];
   upsell_pipeline: ClientUpsellItem[];
   consciousness_level: ConsciousnessLevel;

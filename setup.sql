@@ -188,6 +188,15 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='company_logo') THEN
     ALTER TABLE public.clients ADD COLUMN company_logo TEXT DEFAULT '';
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='cnpj') THEN
+    ALTER TABLE public.clients ADD COLUMN cnpj TEXT DEFAULT '';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='assinatura_descricao') THEN
+    ALTER TABLE public.clients ADD COLUMN assinatura_descricao TEXT DEFAULT '';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='forma_pagamento') THEN
+    ALTER TABLE public.clients ADD COLUMN forma_pagamento TEXT DEFAULT '';
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='risk_resultado') THEN
     ALTER TABLE public.clients ADD COLUMN risk_resultado TEXT DEFAULT '';
   END IF;

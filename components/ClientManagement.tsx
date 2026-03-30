@@ -312,7 +312,17 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
     const avgLT = lts.length > 0 ? lts.reduce((s, c) => s + (c.lt || 0), 0) / lts.length : 0;
     const mrrBySquad: Record<string, number> = {};
     active.forEach(c => { const sq = c.squad_name || 'Sem Squad'; mrrBySquad[sq] = (mrrBySquad[sq] || 0) + (c.mrr || 0); });
-    return { totalMRR, danger, care, safe, churn, impl, active, silent, avgLT, mrrBySquad };
+    // Brand counts (all clients, not just active)
+    const brandPhant = clients.filter(c => c.brands?.phant?.active);
+    const brandLeadbox = clients.filter(c => c.brands?.leadbox?.active);
+    const brandVivemus = clients.filter(c => c.brands?.vivemus?.active);
+    const brandPhantActive = active.filter(c => c.brands?.phant?.active);
+    const brandLeadboxActive = active.filter(c => c.brands?.leadbox?.active);
+    const brandVivemusActive = active.filter(c => c.brands?.vivemus?.active);
+    const mrrPhant = brandPhantActive.reduce((s, c) => s + (c.mrr || 0), 0);
+    const mrrLeadbox = brandLeadboxActive.reduce((s, c) => s + (c.mrr || 0), 0);
+    const mrrVivemus = brandVivemusActive.reduce((s, c) => s + (c.mrr || 0), 0);
+    return { totalMRR, danger, care, safe, churn, impl, active, silent, avgLT, mrrBySquad, brandPhant, brandLeadbox, brandVivemus, brandPhantActive, brandLeadboxActive, brandVivemusActive, mrrPhant, mrrLeadbox, mrrVivemus };
   }, [clients]);
 
   const filtered = useMemo(() => {
@@ -586,6 +596,31 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
         <KpiCard label="LT Médio" value={metrics.avgLT.toFixed(1)} />
         {Object.entries(metrics.mrrBySquad).slice(0, 2).map(([sq, mrr]) => (
           <KpiCard key={sq} label={`MRR ${sq}`} value={fmt(mrr as number)} />
+        ))}
+      </div>
+
+      {/* BRAND CARDS */}
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        {[
+          { label: 'Phant', total: metrics.brandPhant.length, active: metrics.brandPhantActive.length, mrr: metrics.mrrPhant, color: 'bg-purple-50 border-purple-100', dot: 'bg-purple-600', text: 'text-purple-900', logo: brandLogos.phant },
+          { label: 'Leadbox', total: metrics.brandLeadbox.length, active: metrics.brandLeadboxActive.length, mrr: metrics.mrrLeadbox, color: 'bg-blue-50 border-blue-100', dot: 'bg-blue-600', text: 'text-blue-900', logo: brandLogos.leadbox },
+          { label: 'Vivemus', total: metrics.brandVivemus.length, active: metrics.brandVivemusActive.length, mrr: metrics.mrrVivemus, color: 'bg-emerald-50 border-emerald-100', dot: 'bg-emerald-600', text: 'text-emerald-900', logo: brandLogos.vivemus },
+          { label: 'Total Geral', total: clients.length, active: metrics.active.length, mrr: metrics.totalMRR, color: 'bg-gray-50 border-gray-200', dot: 'bg-gray-700', text: 'text-gray-900', logo: '' },
+        ].map(b => (
+          <div key={b.label} className={`p-5 rounded-[20px] border ${b.color}`}>
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-2">
+                {b.logo ? <img src={b.logo} alt={b.label} className="w-5 h-5 rounded-full object-cover" /> : null}
+                <span className="text-[8px] font-black uppercase tracking-widest opacity-60">{b.label}</span>
+              </div>
+              <span className={`w-2 h-2 rounded-full ${b.dot}`} />
+            </div>
+            <span className={`text-3xl font-black ${b.text}`}>{b.active}</span>
+            <div className="flex items-center justify-between mt-1">
+              <span className="text-[9px] font-bold text-gray-400">{b.total} total · {b.total - b.active} inativos</span>
+              <span className="text-[9px] font-black text-gray-500">{fmt(b.mrr)}</span>
+            </div>
+          </div>
         ))}
       </div>
 
