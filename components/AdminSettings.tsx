@@ -66,9 +66,9 @@ const AdminSettings: React.FC = () => {
     contractModels: ['Growth', 'Social', 'Branding', 'One Time'],
     numFuncionarios: ['1-10', '11-50', '51-200', '200+'],
     brandLogos: {
-      phant: { label: 'Phant', description: 'Marca principal', logoUrl: '', color: 'purple' },
-      leadbox: { label: 'Leadbox', description: 'Produto de propagação', logoUrl: '', color: 'blue' },
-      vivemus: { label: 'Vivemus', description: 'Consultoria e direção', logoUrl: '', color: 'emerald' },
+      phant: { label: 'Phant', description: 'Marca principal', logoUrl: 'https://phant.com.br/uploads/simbolo_roxo.png', color: 'purple' },
+      leadbox: { label: 'Leadbox', description: 'Produto de propagação', logoUrl: 'https://phant.com.br/uploads/192x192_20260210_054010_7be369d9.png', color: 'blue' },
+      vivemus: { label: 'Vivemus', description: 'Consultoria e direção', logoUrl: 'https://phant.com.br/uploads/foto_perfil_20260228_231237_ee6c4fb3.png', color: 'emerald' },
     } as Record<string, { label: string; description: string; logoUrl: string; color: string }>,
   });
   const [newSquad, setNewSquad] = useState('');

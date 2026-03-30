@@ -80,11 +80,11 @@ const fmtDate = (d?: string) => { if (!d) return '-'; try { return new Date(d).t
 const daysBetween = (d: string) => { if (!d) return 0; return Math.ceil((new Date(d).getTime() - Date.now()) / 864e5); };
 
 // ====== MICRO COMPONENTS ======
-// ====== BRAND LOGO URLs (fallback — sobrescrito pela config) ======
+// ====== BRAND LOGO URLs (fallback — sobrescrito pela config em Configurações > Clientes > Marcas) ======
 const DEFAULT_BRAND_LOGOS: Record<string, string> = {
-  phant: '',
-  leadbox: '',
-  vivemus: '',
+  phant: 'https://phant.com.br/uploads/simbolo_roxo.png',
+  leadbox: 'https://phant.com.br/uploads/192x192_20260210_054010_7be369d9.png',
+  vivemus: 'https://phant.com.br/uploads/foto_perfil_20260228_231237_ee6c4fb3.png',
 };
 
 // ====== BRAND INLINE BADGES (ao lado do nome no dashboard) ======
@@ -617,8 +617,7 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
             {metrics.silent.slice(0, 12).map(c => (
               <button key={c.id} onClick={() => openDetail(c)}
                 className="px-3 py-1.5 bg-white rounded-lg text-[10px] font-black text-orange-700 border border-orange-200 hover:bg-orange-100 transition-all inline-flex items-center gap-1">
-                {c.company_name}<PhantTag brands={c.brands} logos={brandLogos} />
-              </button>
+                {c.company_name}              </button>
             ))}
           </div>
         </div>

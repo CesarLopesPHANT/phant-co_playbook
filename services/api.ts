@@ -398,7 +398,14 @@ export const SupabaseService = {
         ...item,
         contact: item.contact || {},
         squad: item.squad || [],
-        brands: item.brands ? { phant: { active: false, mrr: 0, is_planning: false, ...item.brands.phant }, leadbox: { active: false, has_propagation: false, ...item.brands.leadbox }, vivemus: { active: false, has_consulting: false, ...item.brands.vivemus } } : { phant: { active: true, mrr: 0, is_planning: false }, leadbox: { active: false, has_propagation: false }, vivemus: { active: false, has_consulting: false } },
+        brands: (() => {
+          const b = item.brands;
+          if (!b) return { phant: { active: true, mrr: 0, is_planning: false }, leadbox: { active: false, has_propagation: false }, vivemus: { active: false, has_consulting: false } };
+          const parsed = { phant: { active: false, mrr: 0, is_planning: false, ...b.phant }, leadbox: { active: false, has_propagation: false, ...b.leadbox }, vivemus: { active: false, has_consulting: false, ...b.vivemus } };
+          // Se nenhuma marca ativa, assume Phant (clientes legados)
+          if (!parsed.phant.active && !parsed.leadbox.active && !parsed.vivemus.active) parsed.phant.active = true;
+          return parsed;
+        })(),
         risk_pillars: item.risk_pillars || [],
         financial_history: item.financial_history || [],
         upsell_pipeline: item.upsell_pipeline || [],
