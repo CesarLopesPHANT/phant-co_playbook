@@ -65,6 +65,11 @@ const AdminSettings: React.FC = () => {
     industries: ['Varejo', 'Construtora', 'Construção', 'Educacao', 'Escola de Idiomas', 'Saúde/Clinica', 'Tecnologia', 'Alimentacao', 'Servicos', 'Industria', 'Energia Solar', 'Comunicação Visual', 'Contabilidade', 'Sistemas/ Software\'s', 'Movelaria', 'Psicologia', 'Esquadrias/Vidraçaria', 'Papelaria', 'Gestão Tributaria', 'Barbearia', 'Telecom', 'Engenharia', 'Odontologia', 'Outro'],
     contractModels: ['Growth', 'Social', 'Branding', 'One Time'],
     numFuncionarios: ['1-10', '11-50', '51-200', '200+'],
+    brandLogos: {
+      phant: { label: 'Phant', description: 'Marca principal', logoUrl: '', color: 'purple' },
+      leadbox: { label: 'Leadbox', description: 'Produto de propagação', logoUrl: '', color: 'blue' },
+      vivemus: { label: 'Vivemus', description: 'Consultoria e direção', logoUrl: '', color: 'emerald' },
+    } as Record<string, { label: string; description: string; logoUrl: string; color: string }>,
   });
   const [newSquad, setNewSquad] = useState('');
   const [newIndustry, setNewIndustry] = useState('');
@@ -98,9 +103,17 @@ const AdminSettings: React.FC = () => {
       if (sols) setSolutions(sols);
       if (branding) {
         setAppConfig(branding);
-        // Load client config from branding if exists
+        // Load client config from branding if exists — merge with defaults
         if ((branding as any).clientConfig) {
-          setClientConfig((branding as any).clientConfig);
+          const saved = (branding as any).clientConfig;
+          setClientConfig(prev => ({
+            ...prev,
+            ...saved,
+            brandLogos: {
+              ...prev.brandLogos,
+              ...(saved.brandLogos || {}),
+            },
+          }));
         }
       }
       // Count clients per squad
@@ -1249,40 +1262,57 @@ const AdminSettings: React.FC = () => {
                 </div>
                 <div>
                   <h3 className="font-black text-lg text-gray-900 tracking-tight">Marcas (Brands)</h3>
-                  <p className="text-[10px] font-bold text-gray-400">Cada cliente pode pertencer a uma ou mais marcas</p>
+                  <p className="text-[10px] font-bold text-gray-400">Configure o logo de cada marca — será exibido no cadastro e nas propostas</p>
                 </div>
               </div>
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <div className="p-5 bg-purple-50 rounded-2xl border border-purple-100 space-y-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-purple-600 rounded-full flex items-center justify-center text-white font-black text-sm shadow-lg">P</div>
-                    <div>
-                      <span className="font-black text-purple-700 text-sm">Phant</span>
-                      <span className="text-[9px] font-bold text-purple-400 block">Marca principal</span>
+                {(Object.entries(clientConfig.brandLogos) as [string, { label: string; description: string; logoUrl: string; color: string }][]).map(([key, brand]) => {
+                  const colorMap: Record<string, { bg: string; border: string; text: string; accent: string; ring: string }> = {
+                    purple: { bg: 'bg-purple-50', border: 'border-purple-100', text: 'text-purple-700', accent: 'bg-purple-600', ring: 'focus:border-purple-400' },
+                    blue: { bg: 'bg-blue-50', border: 'border-blue-100', text: 'text-blue-700', accent: 'bg-blue-600', ring: 'focus:border-blue-400' },
+                    emerald: { bg: 'bg-emerald-50', border: 'border-emerald-100', text: 'text-emerald-700', accent: 'bg-emerald-600', ring: 'focus:border-emerald-400' },
+                  };
+                  const c = colorMap[brand.color] || colorMap.purple;
+                  return (
+                    <div key={key} className={`p-5 ${c.bg} rounded-2xl border ${c.border} space-y-4`}>
+                      <div className="flex items-center gap-3">
+                        {brand.logoUrl ? (
+                          <img src={brand.logoUrl} alt={brand.label} className="w-10 h-10 object-contain rounded-full border-2 border-white shadow-lg" />
+                        ) : (
+                          <div className={`w-10 h-10 ${c.accent} rounded-full flex items-center justify-center text-white font-black text-sm shadow-lg`}>
+                            {brand.label.charAt(0)}
+                          </div>
+                        )}
+                        <div>
+                          <span className={`font-black ${c.text} text-sm`}>{brand.label}</span>
+                          <span className={`text-[9px] font-bold ${c.text} opacity-50 block`}>{brand.description}</span>
+                        </div>
+                      </div>
+                      <div className="space-y-1">
+                        <label className="text-[8px] font-black text-gray-400 uppercase tracking-widest ml-1">URL do Logo</label>
+                        <input
+                          value={brand.logoUrl}
+                          onChange={e => setClientConfig({
+                            ...clientConfig,
+                            brandLogos: { ...clientConfig.brandLogos, [key]: { ...brand, logoUrl: e.target.value } }
+                          })}
+                          placeholder="https://exemplo.com/logo.png"
+                          className={`w-full bg-white/80 p-3 rounded-xl font-medium text-[11px] outline-none border border-transparent ${c.ring} transition-all`}
+                        />
+                      </div>
+                      {brand.logoUrl && (
+                        <div className="flex items-center gap-2 p-2 bg-white/60 rounded-lg">
+                          <img src={brand.logoUrl} alt="Preview" className="w-6 h-6 object-contain rounded-full" />
+                          <span className="text-[9px] font-bold text-gray-500 truncate flex-1">Logo configurado</span>
+                          <button onClick={() => setClientConfig({
+                            ...clientConfig,
+                            brandLogos: { ...clientConfig.brandLogos, [key]: { ...brand, logoUrl: '' } }
+                          })} className="text-red-300 hover:text-red-500 text-xs font-black">×</button>
+                        </div>
+                      )}
                     </div>
-                  </div>
-                  <p className="text-[10px] text-purple-600/70 font-medium leading-relaxed">Agência de marketing digital. Clientes com serviços de Growth, Social, Branding.</p>
-                </div>
-                <div className="p-5 bg-blue-50 rounded-2xl border border-blue-100 space-y-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-blue-600 rounded-full flex items-center justify-center text-white font-black text-sm shadow-lg">L</div>
-                    <div>
-                      <span className="font-black text-blue-700 text-sm">Leadbox</span>
-                      <span className="text-[9px] font-bold text-blue-400 block">Produto de propagação</span>
-                    </div>
-                  </div>
-                  <p className="text-[10px] text-blue-600/70 font-medium leading-relaxed">Plataforma de geração e gestão de leads com automação de marketing.</p>
-                </div>
-                <div className="p-5 bg-emerald-50 rounded-2xl border border-emerald-100 space-y-3">
-                  <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 bg-emerald-600 rounded-full flex items-center justify-center text-white font-black text-sm shadow-lg">V</div>
-                    <div>
-                      <span className="font-black text-emerald-700 text-sm">Vivemus</span>
-                      <span className="text-[9px] font-bold text-emerald-400 block">Consultoria e direção</span>
-                    </div>
-                  </div>
-                  <p className="text-[10px] text-emerald-600/70 font-medium leading-relaxed">Consultoria estratégica e direção criativa para posicionamento de marca.</p>
-                </div>
+                  );
+                })}
               </div>
             </div>
 

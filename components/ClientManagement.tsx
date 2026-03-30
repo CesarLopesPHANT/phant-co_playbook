@@ -80,58 +80,77 @@ const fmtDate = (d?: string) => { if (!d) return '-'; try { return new Date(d).t
 const daysBetween = (d: string) => { if (!d) return 0; return Math.ceil((new Date(d).getTime() - Date.now()) / 864e5); };
 
 // ====== MICRO COMPONENTS ======
-// ====== BRAND LOGO URLs ======
-const PHANT_LOGO = 'https://phant.com.br/uploads/simbolo_roxo.png';
-const LEADBOX_LOGO = 'https://phant.com.br/uploads/192x192_20260210_054010_7be369d9.png';
-const VIVEMUS_LOGO = 'https://phant.com.br/uploads/foto_perfil_20260228_231237_ee6c4fb3.png';
+// ====== BRAND LOGO URLs (fallback — sobrescrito pela config) ======
+const DEFAULT_BRAND_LOGOS: Record<string, string> = {
+  phant: '',
+  leadbox: '',
+  vivemus: '',
+};
 
 // ====== BRAND INLINE BADGES (ao lado do nome no dashboard) ======
-const PhantTag: React.FC<{ brands?: ClientRecord['brands'] }> = ({ brands }) => {
+const PhantTag: React.FC<{ brands?: ClientRecord['brands']; logos?: Record<string, string> }> = ({ brands, logos }) => {
   const items = [
-    { active: brands?.phant?.active, logo: PHANT_LOGO, title: 'Phant' },
-    { active: brands?.leadbox?.active, logo: LEADBOX_LOGO, title: 'Leadbox' },
-    { active: brands?.vivemus?.active, logo: VIVEMUS_LOGO, title: 'Vivemus' },
+    { active: brands?.phant?.active, logo: logos?.phant, title: 'Phant', letter: 'P', color: 'bg-purple-600' },
+    { active: brands?.leadbox?.active, logo: logos?.leadbox, title: 'Leadbox', letter: 'L', color: 'bg-blue-600' },
+    { active: brands?.vivemus?.active, logo: logos?.vivemus, title: 'Vivemus', letter: 'V', color: 'bg-emerald-600' },
   ];
   const activeItems = items.filter(d => d.active);
   if (activeItems.length === 0) return null;
   return (
     <>
       {activeItems.map(d => (
-        <img key={d.title} src={d.logo} alt={d.title} title={d.title} className="inline-block w-[18px] h-[18px] object-contain shrink-0 align-middle ml-1.5 rounded-full" />
+        d.logo ? (
+          <img key={d.title} src={d.logo} alt={d.title} title={d.title} className="inline-block w-[18px] h-[18px] object-contain shrink-0 align-middle ml-1.5 rounded-full" />
+        ) : (
+          <span key={d.title} title={d.title} className={`inline-flex w-[18px] h-[18px] ${d.color} rounded-full items-center justify-center shrink-0 align-middle ml-1.5`}>
+            <span className="text-[8px] font-black text-white leading-none">{d.letter}</span>
+          </span>
+        )
       ))}
     </>
   );
 };
 
 // ====== BRAND BADGES (logos na coluna Marca com sobreposição) ======
-const BrandDots: React.FC<{ brands: ClientRecord['brands']; companyLogo?: string; companyName?: string }> = ({ brands, companyLogo, companyName }) => {
+const BrandDots: React.FC<{ brands: ClientRecord['brands']; companyLogo?: string; companyName?: string; logos?: Record<string, string> }> = ({ brands, companyLogo, companyName, logos: brandLogoUrls }) => {
   const items = [
-    { active: brands?.phant?.active, logo: PHANT_LOGO, title: 'Phant' },
-    { active: brands?.leadbox?.active, logo: LEADBOX_LOGO, title: 'Leadbox' },
-    { active: brands?.vivemus?.active, logo: VIVEMUS_LOGO, title: 'Vivemus' },
+    { active: brands?.phant?.active, logo: brandLogoUrls?.phant, title: 'Phant', letter: 'P', color: 'bg-purple-600' },
+    { active: brands?.leadbox?.active, logo: brandLogoUrls?.leadbox, title: 'Leadbox', letter: 'L', color: 'bg-blue-600' },
+    { active: brands?.vivemus?.active, logo: brandLogoUrls?.vivemus, title: 'Vivemus', letter: 'V', color: 'bg-emerald-600' },
   ];
   const activeItems = items.filter(d => d.active);
 
-  // Monta array de logos: company_logo primeiro, depois marcas ativas
-  const logos: { src: string; title: string; isCompany?: boolean }[] = [];
+  // Monta array: company_logo primeiro, depois marcas ativas
+  const stack: { src?: string; title: string; isCompany?: boolean; letter: string; color: string }[] = [];
   if (companyLogo) {
-    logos.push({ src: companyLogo, title: companyName || 'Empresa', isCompany: true });
+    stack.push({ src: companyLogo, title: companyName || 'Empresa', isCompany: true, letter: (companyName || 'E').charAt(0), color: 'bg-gray-600' });
   }
-  activeItems.forEach(d => logos.push({ src: d.logo, title: d.title }));
+  activeItems.forEach(d => stack.push({ src: d.logo, title: d.title, letter: d.letter, color: d.color }));
 
-  if (logos.length === 0) return <span className="text-[10px] text-gray-300">-</span>;
+  if (stack.length === 0) return <span className="text-[10px] text-gray-300">-</span>;
 
   return (
-    <div className="flex items-center" style={{ minWidth: `${28 + (logos.length - 1) * 18}px` }}>
-      {logos.map((d, i) => (
-        <img
-          key={d.title}
-          src={d.src}
-          alt={d.title}
-          title={d.title}
-          className={`w-7 h-7 object-contain rounded-full border-2 border-white shadow-sm ${d.isCompany ? 'ring-1 ring-gray-200' : ''}`}
-          style={{ marginLeft: i === 0 ? 0 : -8, zIndex: logos.length - i, position: 'relative' }}
-        />
+    <div className="flex items-center" style={{ minWidth: `${28 + (stack.length - 1) * 18}px` }}>
+      {stack.map((d, i) => (
+        d.src ? (
+          <img
+            key={d.title}
+            src={d.src}
+            alt={d.title}
+            title={d.title}
+            className={`w-7 h-7 object-contain rounded-full border-2 border-white shadow-sm ${d.isCompany ? 'ring-1 ring-gray-200' : ''}`}
+            style={{ marginLeft: i === 0 ? 0 : -8, zIndex: stack.length - i, position: 'relative' }}
+          />
+        ) : (
+          <span
+            key={d.title}
+            title={d.title}
+            className={`w-7 h-7 ${d.color} rounded-full flex items-center justify-center border-2 border-white shadow-sm`}
+            style={{ marginLeft: i === 0 ? 0 : -8, zIndex: stack.length - i, position: 'relative' }}
+          >
+            <span className="text-[9px] font-black text-white leading-none">{d.letter}</span>
+          </span>
+        )
       ))}
     </div>
   );
@@ -242,6 +261,16 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
   const dynamicSquadOptions = useMemo(() => {
     const configSquads = (appConfig as any)?.clientConfig?.squads;
     return configSquads && configSquads.length > 0 ? [...configSquads, '-'] : SQUAD_OPTIONS;
+  }, [appConfig]);
+
+  // Resolve brand logos from config (AdminSettings > Clientes > Marcas)
+  const brandLogos = useMemo(() => {
+    const cfg = (appConfig as any)?.clientConfig?.brandLogos;
+    return {
+      phant: cfg?.phant?.logoUrl || DEFAULT_BRAND_LOGOS.phant,
+      leadbox: cfg?.leadbox?.logoUrl || DEFAULT_BRAND_LOGOS.leadbox,
+      vivemus: cfg?.vivemus?.logoUrl || DEFAULT_BRAND_LOGOS.vivemus,
+    };
   }, [appConfig]);
   const [clients, setClients] = useState<ClientRecord[]>([]);
   const [planning, setPlanning] = useState<PlanningItem[]>([]);
@@ -405,18 +434,23 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
                   </label>
                   <div className={`flex flex-wrap gap-3 p-3 rounded-2xl transition-all ${noBrand && !isEditing ? 'bg-red-50/50 border-2 border-dashed border-red-200' : 'bg-transparent'}`}>
                     {[
-                      { key: 'phant' as const, label: 'Phant', bg: 'bg-purple-50', border: 'border-purple-200', activeBg: 'bg-purple-600', icon: PHANT_LOGO },
-                      { key: 'leadbox' as const, label: 'Leadbox', bg: 'bg-blue-50', border: 'border-blue-200', activeBg: 'bg-blue-600', icon: LEADBOX_LOGO },
-                      { key: 'vivemus' as const, label: 'Vivemus', bg: 'bg-emerald-50', border: 'border-emerald-200', activeBg: 'bg-emerald-600', icon: VIVEMUS_LOGO },
+                      { key: 'phant' as const, label: 'Phant', bg: 'bg-purple-50', border: 'border-purple-200', activeBg: 'bg-purple-600', letter: 'P' },
+                      { key: 'leadbox' as const, label: 'Leadbox', bg: 'bg-blue-50', border: 'border-blue-200', activeBg: 'bg-blue-600', letter: 'L' },
+                      { key: 'vivemus' as const, label: 'Vivemus', bg: 'bg-emerald-50', border: 'border-emerald-200', activeBg: 'bg-emerald-600', letter: 'V' },
                     ].map(b => {
                       const isActive = editForm.brands?.[b.key]?.active;
+                      const logo = brandLogos[b.key];
                       return (
                         <button key={b.key} type="button"
                           onClick={() => setEditForm({ ...editForm, brands: { ...editForm.brands, [b.key]: { ...editForm.brands?.[b.key], active: !isActive } } })}
                           className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 font-black text-xs uppercase tracking-widest transition-all ${
                             isActive ? `${b.activeBg} text-white border-transparent shadow-lg` : `${b.bg} ${b.border} text-gray-500`
                           }`}>
-                          <img src={b.icon} alt={b.label} className={`w-4 h-4 object-contain rounded-full ${isActive ? 'brightness-0 invert' : ''}`} />
+                          {logo ? (
+                            <img src={logo} alt={b.label} className={`w-5 h-5 object-contain rounded-full ${isActive ? 'brightness-0 invert' : ''}`} />
+                          ) : (
+                            <span className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-black ${isActive ? 'bg-white/20 text-white' : `${b.activeBg} text-white`}`}>{b.letter}</span>
+                          )}
                           {b.label}
                         </button>
                       );
@@ -583,7 +617,7 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
             {metrics.silent.slice(0, 12).map(c => (
               <button key={c.id} onClick={() => openDetail(c)}
                 className="px-3 py-1.5 bg-white rounded-lg text-[10px] font-black text-orange-700 border border-orange-200 hover:bg-orange-100 transition-all inline-flex items-center gap-1">
-                {c.company_name}<PhantTag brands={c.brands} />
+                {c.company_name}<PhantTag brands={c.brands} logos={brandLogos} />
               </button>
             ))}
           </div>
@@ -603,7 +637,7 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
                     <span className="text-red-600 font-black text-sm">{c.company_name.charAt(0)}</span>
                   </div>
                   <div>
-                    <span className="font-black text-sm text-gray-900 group-hover:text-brand transition-colors inline-flex items-center">{c.company_name}<PhantTag brands={c.brands} /></span>
+                    <span className="font-black text-sm text-gray-900 group-hover:text-brand transition-colors inline-flex items-center">{c.company_name}<PhantTag brands={c.brands} logos={brandLogos} /></span>
                     <span className="text-[9px] font-bold text-gray-400 block">{c.industry} · {fmt(c.mrr)}</span>
                   </div>
                 </div>
@@ -657,8 +691,8 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
             {filtered.map((c, i) => (
               <tr key={c.id} className={trHover} onClick={() => openDetail(c)}>
                 <td className={`${td} text-gray-400 font-bold`}>{i + 1}</td>
-                <td className="px-4 py-3.5"><BrandDots brands={c.brands} companyLogo={c.company_logo} companyName={c.company_name} /></td>
-                <td className={tdBold}><span className="inline-flex items-center">{c.company_name}<PhantTag brands={c.brands} /></span></td>
+                <td className="px-4 py-3.5"><BrandDots brands={c.brands} companyLogo={c.company_logo} companyName={c.company_name} logos={brandLogos} /></td>
+                <td className={tdBold}><span className="inline-flex items-center">{c.company_name}<PhantTag brands={c.brands} logos={brandLogos} /></span></td>
                 <td className={td}>
                   <span className={`text-[10px] font-black ${c.status === 'active' ? 'text-emerald-600' : 'text-gray-400'}`}>
                     {c.status === 'active' ? 'Ativo' : 'Inativo'}
@@ -729,8 +763,8 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
           <tbody>
             {filtered.map(c => (
               <tr key={c.id} className={trHover} onClick={() => openDetail(c)}>
-                <td className="px-4 py-3.5"><BrandDots brands={c.brands} companyLogo={c.company_logo} companyName={c.company_name} /></td>
-                <td className={tdBold}><span className="inline-flex items-center">{c.company_name}<PhantTag brands={c.brands} /></span></td>
+                <td className="px-4 py-3.5"><BrandDots brands={c.brands} companyLogo={c.company_logo} companyName={c.company_name} logos={brandLogos} /></td>
+                <td className={tdBold}><span className="inline-flex items-center">{c.company_name}<PhantTag brands={c.brands} logos={brandLogos} /></span></td>
                 <td className={td}><span className={c.status === 'active' ? 'text-emerald-600 font-bold' : 'text-gray-400'}>{c.status === 'active' ? 'Ativo' : 'Inativo'}</span></td>
                 <td className={`${td} font-bold text-blue-600`}>{c.squad_name || '-'}</td>
                 <td className={td}>{fmtDate(c.contato_trimestre)}</td>
@@ -951,7 +985,7 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
             <div className="flex-1">
               <div className="flex items-center gap-3">
                 <h1 className="text-3xl font-black text-gray-900 tracking-tighter leading-none inline-flex items-center">{c.company_name}</h1>
-                <BrandDots brands={c.brands} companyLogo={c.company_logo} companyName={c.company_name} />
+                <BrandDots brands={c.brands} companyLogo={c.company_logo} companyName={c.company_name} logos={brandLogos} />
               </div>
               <div className="flex items-center gap-3 mt-2 flex-wrap">
                 <StatusBadge status={c.health_status || c.health} size="md" />
@@ -974,14 +1008,19 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
             {/* MARCAS ATIVAS */}
             <div className="flex flex-wrap gap-2">
               {[
-                { key: 'phant' as const, label: 'Phant', logo: PHANT_LOGO, bg: 'bg-purple-50 border-purple-200 text-purple-700', activeBg: 'bg-purple-600 text-white border-purple-600' },
-                { key: 'leadbox' as const, label: 'Leadbox', logo: LEADBOX_LOGO, bg: 'bg-blue-50 border-blue-200 text-blue-700', activeBg: 'bg-blue-600 text-white border-blue-600' },
-                { key: 'vivemus' as const, label: 'Vivemus', logo: VIVEMUS_LOGO, bg: 'bg-emerald-50 border-emerald-200 text-emerald-700', activeBg: 'bg-emerald-600 text-white border-emerald-600' },
+                { key: 'phant' as const, label: 'Phant', letter: 'P', colorBg: 'bg-purple-600', bg: 'bg-purple-50 border-purple-200 text-purple-700', activeBg: 'bg-purple-600 text-white border-purple-600' },
+                { key: 'leadbox' as const, label: 'Leadbox', letter: 'L', colorBg: 'bg-blue-600', bg: 'bg-blue-50 border-blue-200 text-blue-700', activeBg: 'bg-blue-600 text-white border-blue-600' },
+                { key: 'vivemus' as const, label: 'Vivemus', letter: 'V', colorBg: 'bg-emerald-600', bg: 'bg-emerald-50 border-emerald-200 text-emerald-700', activeBg: 'bg-emerald-600 text-white border-emerald-600' },
               ].map(b => {
                 const isActive = c.brands?.[b.key]?.active;
+                const logo = brandLogos[b.key];
                 return (
                   <span key={b.key} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider border ${isActive ? b.activeBg : 'bg-gray-50 border-gray-100 text-gray-300'}`}>
-                    <img src={b.logo} alt={b.label} className={`w-4 h-4 object-contain rounded-full ${isActive ? 'brightness-0 invert' : 'opacity-40'}`} />
+                    {logo ? (
+                      <img src={logo} alt={b.label} className={`w-4 h-4 object-contain rounded-full ${isActive ? 'brightness-0 invert' : 'opacity-40'}`} />
+                    ) : (
+                      <span className={`w-4 h-4 rounded-full flex items-center justify-center text-[7px] font-black ${isActive ? 'bg-white/20 text-white' : `${b.colorBg} text-white opacity-40`}`}>{b.letter}</span>
+                    )}
                     {b.label}
                   </span>
                 );
