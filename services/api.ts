@@ -414,7 +414,8 @@ export const SupabaseService = {
         lt: item.lt || undefined,
         nps: item.nps || undefined,
         ultima_nota: item.ultima_nota || undefined,
-        recomendacao: item.recomendacao || ''
+        recomendacao: item.recomendacao || '',
+        company_logo: item.company_logo || ''
       }));
     } catch (err) { console.error("Erro fatal fetchClients:", err); return []; }
   },

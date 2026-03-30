@@ -185,6 +185,9 @@ BEGIN
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='health_status') THEN
     ALTER TABLE public.clients ADD COLUMN health_status TEXT DEFAULT 'care';
   END IF;
+  IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='company_logo') THEN
+    ALTER TABLE public.clients ADD COLUMN company_logo TEXT DEFAULT '';
+  END IF;
   IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name='clients' AND column_name='risk_resultado') THEN
     ALTER TABLE public.clients ADD COLUMN risk_resultado TEXT DEFAULT '';
   END IF;

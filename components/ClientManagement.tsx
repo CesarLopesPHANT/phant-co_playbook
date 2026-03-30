@@ -14,7 +14,7 @@ interface ClientManagementProps {
 const EMPTY_CLIENT: Omit<ClientRecord, 'id' | 'created_at' | 'updated_at'> = {
   company_name: '', industry: '', location: '', website: '', instagram: '',
   contact: { name: '', email: '', phone: '' }, squad: [],
-  brands: { phant: { active: true, mrr: 0, is_planning: false }, leadbox: { active: false, has_propagation: false }, vivemus: { active: false, has_consulting: false } },
+  brands: { phant: { active: false, mrr: 0, is_planning: false }, leadbox: { active: false, has_propagation: false }, vivemus: { active: false, has_consulting: false } },
   health: 'care', health_status: 'care',
   risk_pillars: [{ name: 'Resultado', score: 5 }, { name: 'Entregas', score: 5 }, { name: 'Relacionamento', score: 5 }],
   risk_resultado: '', risk_entregas: '', risk_relacionamento: '',
@@ -22,7 +22,7 @@ const EMPTY_CLIENT: Omit<ClientRecord, 'id' | 'created_at' | 'updated_at'> = {
   mrr: 0, fee: 0, contract_model: 'Growth', squad_name: '',
   ano_fundacao: '', receita_anual: '', num_funcionarios: '', data_entrada: '', data_onboarding: '',
   contato_trimestre: '', assinatura_date: '', churn_date: '',
-  lt: undefined, nps: undefined, ultima_nota: undefined, recomendacao: '',
+  lt: undefined, nps: undefined, ultima_nota: undefined, recomendacao: '', company_logo: '',
   financial_history: [], upsell_pipeline: [], consciousness_level: 'inconsciente',
   milestones: [], last_report_date: undefined, intervention_plan: '', notes: '', status: 'active'
 };
@@ -103,19 +103,35 @@ const PhantTag: React.FC<{ brands?: ClientRecord['brands'] }> = ({ brands }) => 
   );
 };
 
-// ====== BRAND BADGES (logos na coluna Marca) ======
-const BrandDots: React.FC<{ brands: ClientRecord['brands'] }> = ({ brands }) => {
+// ====== BRAND BADGES (logos na coluna Marca com sobreposição) ======
+const BrandDots: React.FC<{ brands: ClientRecord['brands']; companyLogo?: string; companyName?: string }> = ({ brands, companyLogo, companyName }) => {
   const items = [
     { active: brands?.phant?.active, logo: PHANT_LOGO, title: 'Phant' },
     { active: brands?.leadbox?.active, logo: LEADBOX_LOGO, title: 'Leadbox' },
     { active: brands?.vivemus?.active, logo: VIVEMUS_LOGO, title: 'Vivemus' },
   ];
   const activeItems = items.filter(d => d.active);
-  if (activeItems.length === 0) return <span className="text-[10px] text-gray-300">-</span>;
+
+  // Monta array de logos: company_logo primeiro, depois marcas ativas
+  const logos: { src: string; title: string; isCompany?: boolean }[] = [];
+  if (companyLogo) {
+    logos.push({ src: companyLogo, title: companyName || 'Empresa', isCompany: true });
+  }
+  activeItems.forEach(d => logos.push({ src: d.logo, title: d.title }));
+
+  if (logos.length === 0) return <span className="text-[10px] text-gray-300">-</span>;
+
   return (
-    <div className="flex gap-1.5 items-center">
-      {activeItems.map(d => (
-        <img key={d.title} src={d.logo} alt={d.title} title={d.title} className="w-6 h-6 object-contain rounded-full" />
+    <div className="flex items-center" style={{ minWidth: `${28 + (logos.length - 1) * 18}px` }}>
+      {logos.map((d, i) => (
+        <img
+          key={d.title}
+          src={d.src}
+          alt={d.title}
+          title={d.title}
+          className={`w-7 h-7 object-contain rounded-full border-2 border-white shadow-sm ${d.isCompany ? 'ring-1 ring-gray-200' : ''}`}
+          style={{ marginLeft: i === 0 ? 0 : -8, zIndex: logos.length - i, position: 'relative' }}
+        />
       ))}
     </div>
   );
@@ -355,6 +371,17 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
           {/* DADOS EMPRESA */}
           <div className="space-y-3">
             <SectionTitle>Dados da Empresa</SectionTitle>
+            {/* LOGO DA EMPRESA */}
+            <div className="flex items-center gap-4">
+              <div className="w-16 h-16 rounded-2xl border-2 border-dashed border-gray-200 flex items-center justify-center overflow-hidden bg-gray-50 shrink-0">
+                {editForm.company_logo ? (
+                  <img src={editForm.company_logo} alt="Logo" className="w-full h-full object-contain" />
+                ) : (
+                  <svg className="w-6 h-6 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z"/></svg>
+                )}
+              </div>
+              <InputField value={editForm.company_logo || ''} onChange={v => setEditForm({ ...editForm, company_logo: v })} placeholder="URL do Logo da Empresa" className="flex-1" />
+            </div>
             <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
               <InputField value={editForm.company_name} onChange={v => setEditForm({ ...editForm, company_name: v })} placeholder="Nome da Empresa *" />
               <SelectField value={editForm.industry} onChange={v => setEditForm({ ...editForm, industry: v })} options={INDUSTRIES.map(i => ({ value: i, label: i }))} placeholder="Indústria / Setor" />
@@ -368,26 +395,36 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
           {/* DADOS INTERNOS */}
           <div className="space-y-3">
             <SectionTitle>Dados Internos</SectionTitle>
-            {/* MARCAS */}
-            <div className="flex flex-wrap gap-3">
-              {[
-                { key: 'phant' as const, label: 'Phant', bg: 'bg-purple-50', border: 'border-purple-200', activeBg: 'bg-purple-600', icon: PHANT_LOGO },
-                { key: 'leadbox' as const, label: 'Leadbox', bg: 'bg-blue-50', border: 'border-blue-200', activeBg: 'bg-blue-600', icon: LEADBOX_LOGO },
-                { key: 'vivemus' as const, label: 'Vivemus', bg: 'bg-emerald-50', border: 'border-emerald-200', activeBg: 'bg-emerald-600', icon: VIVEMUS_LOGO },
-              ].map(b => {
-                const isActive = editForm.brands?.[b.key]?.active;
-                return (
-                  <button key={b.key} type="button"
-                    onClick={() => setEditForm({ ...editForm, brands: { ...editForm.brands, [b.key]: { ...editForm.brands?.[b.key], active: !isActive } } })}
-                    className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 font-black text-xs uppercase tracking-widest transition-all ${
-                      isActive ? `${b.activeBg} text-white border-transparent shadow-lg` : `${b.bg} ${b.border} text-gray-500`
-                    }`}>
-                    <img src={b.icon} alt={b.label} className={`w-4 h-4 object-contain rounded-full ${isActive ? 'brightness-0 invert' : ''}`} />
-                    {b.label}
-                  </button>
-                );
-              })}
-            </div>
+            {/* MARCAS — obrigatório selecionar ao menos uma */}
+            {(() => {
+              const noBrand = !editForm.brands?.phant?.active && !editForm.brands?.leadbox?.active && !editForm.brands?.vivemus?.active;
+              return (
+                <div className="space-y-2">
+                  <label className={`text-[10px] font-black uppercase tracking-widest ml-1 ${noBrand && !isEditing ? 'text-red-500 animate-pulse' : 'text-gray-400'}`}>
+                    {noBrand && !isEditing ? 'Selecione a empresa do contrato *' : 'Empresa do Contrato'}
+                  </label>
+                  <div className={`flex flex-wrap gap-3 p-3 rounded-2xl transition-all ${noBrand && !isEditing ? 'bg-red-50/50 border-2 border-dashed border-red-200' : 'bg-transparent'}`}>
+                    {[
+                      { key: 'phant' as const, label: 'Phant', bg: 'bg-purple-50', border: 'border-purple-200', activeBg: 'bg-purple-600', icon: PHANT_LOGO },
+                      { key: 'leadbox' as const, label: 'Leadbox', bg: 'bg-blue-50', border: 'border-blue-200', activeBg: 'bg-blue-600', icon: LEADBOX_LOGO },
+                      { key: 'vivemus' as const, label: 'Vivemus', bg: 'bg-emerald-50', border: 'border-emerald-200', activeBg: 'bg-emerald-600', icon: VIVEMUS_LOGO },
+                    ].map(b => {
+                      const isActive = editForm.brands?.[b.key]?.active;
+                      return (
+                        <button key={b.key} type="button"
+                          onClick={() => setEditForm({ ...editForm, brands: { ...editForm.brands, [b.key]: { ...editForm.brands?.[b.key], active: !isActive } } })}
+                          className={`flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 font-black text-xs uppercase tracking-widest transition-all ${
+                            isActive ? `${b.activeBg} text-white border-transparent shadow-lg` : `${b.bg} ${b.border} text-gray-500`
+                          }`}>
+                          <img src={b.icon} alt={b.label} className={`w-4 h-4 object-contain rounded-full ${isActive ? 'brightness-0 invert' : ''}`} />
+                          {b.label}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            })()}
             <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
               <InputField type="number" value={editForm.fee || 0} onChange={v => setEditForm({ ...editForm, fee: Number(v) })} placeholder="Fee" />
               <SelectField value={editForm.contract_model || 'Growth'} onChange={v => setEditForm({ ...editForm, contract_model: v })} options={CONTRACT_MODELS.map(m => ({ value: m, label: m }))} />
@@ -440,12 +477,18 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
               className="w-full px-4 py-3.5 bg-gray-50 rounded-2xl font-bold text-sm outline-none border-2 border-transparent focus:border-black resize-none transition-colors" />
           </div>
 
-          <button onClick={save} disabled={!editForm.company_name || savingState === 'saving'}
-            className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl transition-all ${
-              savingState === 'saved' ? 'bg-emerald-500 text-white' : savingState === 'saving' ? 'bg-gray-200 text-gray-400' : 'bg-black text-white hover:bg-brand'
-            }`}>
-            {savingState === 'saved' ? 'Salvo!' : savingState === 'saving' ? 'Salvando...' : isEditing ? 'Atualizar' : 'Cadastrar'}
-          </button>
+          {(() => {
+            const noBrand = !editForm.brands?.phant?.active && !editForm.brands?.leadbox?.active && !editForm.brands?.vivemus?.active;
+            const canSave = editForm.company_name && (!noBrand || isEditing) && savingState !== 'saving';
+            return (
+              <button onClick={save} disabled={!canSave}
+                className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl transition-all ${
+                  savingState === 'saved' ? 'bg-emerald-500 text-white' : savingState === 'saving' ? 'bg-gray-200 text-gray-400' : !canSave ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-black text-white hover:bg-brand'
+                }`}>
+                {savingState === 'saved' ? 'Salvo!' : savingState === 'saving' ? 'Salvando...' : noBrand && !isEditing ? 'Selecione a empresa do contrato' : isEditing ? 'Atualizar' : 'Cadastrar'}
+              </button>
+            );
+          })()}
         </div>
       </div>
     </div>
@@ -614,7 +657,7 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
             {filtered.map((c, i) => (
               <tr key={c.id} className={trHover} onClick={() => openDetail(c)}>
                 <td className={`${td} text-gray-400 font-bold`}>{i + 1}</td>
-                <td className="px-4 py-3.5"><BrandDots brands={c.brands} /></td>
+                <td className="px-4 py-3.5"><BrandDots brands={c.brands} companyLogo={c.company_logo} companyName={c.company_name} /></td>
                 <td className={tdBold}><span className="inline-flex items-center">{c.company_name}<PhantTag brands={c.brands} /></span></td>
                 <td className={td}>
                   <span className={`text-[10px] font-black ${c.status === 'active' ? 'text-emerald-600' : 'text-gray-400'}`}>
@@ -686,7 +729,7 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
           <tbody>
             {filtered.map(c => (
               <tr key={c.id} className={trHover} onClick={() => openDetail(c)}>
-                <td className="px-4 py-3.5"><BrandDots brands={c.brands} /></td>
+                <td className="px-4 py-3.5"><BrandDots brands={c.brands} companyLogo={c.company_logo} companyName={c.company_name} /></td>
                 <td className={tdBold}><span className="inline-flex items-center">{c.company_name}<PhantTag brands={c.brands} /></span></td>
                 <td className={td}><span className={c.status === 'active' ? 'text-emerald-600 font-bold' : 'text-gray-400'}>{c.status === 'active' ? 'Ativo' : 'Inativo'}</span></td>
                 <td className={`${td} font-bold text-blue-600`}>{c.squad_name || '-'}</td>
@@ -896,11 +939,20 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
         <header className="space-y-4">
           <button onClick={() => setView('cadastro')} className="text-[10px] font-black text-gray-400 uppercase tracking-widest hover:text-brand transition-colors">&larr; Voltar</button>
           <div className="flex items-center gap-6">
-            <div className="flex gap-2 items-center">
-              <BrandDots brands={c.brands} />
+            <div className="shrink-0">
+              {c.company_logo ? (
+                <img src={c.company_logo} alt={c.company_name} className="w-16 h-16 object-contain rounded-2xl border border-gray-100" />
+              ) : (
+                <div className="w-16 h-16 rounded-2xl bg-gray-100 flex items-center justify-center border border-gray-100">
+                  <span className="text-xl font-black text-gray-400">{c.company_name.charAt(0)}</span>
+                </div>
+              )}
             </div>
             <div className="flex-1">
-              <h1 className="text-3xl font-black text-gray-900 tracking-tighter leading-none inline-flex items-center">{c.company_name}<PhantTag brands={c.brands} /></h1>
+              <div className="flex items-center gap-3">
+                <h1 className="text-3xl font-black text-gray-900 tracking-tighter leading-none inline-flex items-center">{c.company_name}</h1>
+                <BrandDots brands={c.brands} companyLogo={c.company_logo} companyName={c.company_name} />
+              </div>
               <div className="flex items-center gap-3 mt-2 flex-wrap">
                 <StatusBadge status={c.health_status || c.health} size="md" />
                 <span className="text-[10px] font-bold text-gray-400">{c.industry} · {c.location || '-'} · Squad: {c.squad_name || '-'} · {c.contract_model || '-'}</span>
@@ -919,6 +971,22 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
           {/* A: IDENTIDADE & CONTATO */}
           <div className="p-6 bg-white rounded-[20px] border border-gray-100 space-y-5">
             <SectionTitle>Identidade & Contato</SectionTitle>
+            {/* MARCAS ATIVAS */}
+            <div className="flex flex-wrap gap-2">
+              {[
+                { key: 'phant' as const, label: 'Phant', logo: PHANT_LOGO, bg: 'bg-purple-50 border-purple-200 text-purple-700', activeBg: 'bg-purple-600 text-white border-purple-600' },
+                { key: 'leadbox' as const, label: 'Leadbox', logo: LEADBOX_LOGO, bg: 'bg-blue-50 border-blue-200 text-blue-700', activeBg: 'bg-blue-600 text-white border-blue-600' },
+                { key: 'vivemus' as const, label: 'Vivemus', logo: VIVEMUS_LOGO, bg: 'bg-emerald-50 border-emerald-200 text-emerald-700', activeBg: 'bg-emerald-600 text-white border-emerald-600' },
+              ].map(b => {
+                const isActive = c.brands?.[b.key]?.active;
+                return (
+                  <span key={b.key} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-wider border ${isActive ? b.activeBg : 'bg-gray-50 border-gray-100 text-gray-300'}`}>
+                    <img src={b.logo} alt={b.label} className={`w-4 h-4 object-contain rounded-full ${isActive ? 'brightness-0 invert' : 'opacity-40'}`} />
+                    {b.label}
+                  </span>
+                );
+              })}
+            </div>
             <div className="grid grid-cols-2 gap-y-3 text-[12px]">
               <span className="font-bold text-gray-400">Indústria</span><span className="font-black text-gray-900">{c.industry || '-'}</span>
               <span className="font-bold text-gray-400">Localização</span><span className="font-black text-gray-900">{c.location || '-'}</span>

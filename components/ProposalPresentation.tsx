@@ -74,8 +74,14 @@ const ProposalPresentation: React.FC<ProposalPresentationProps> = ({ metadata, i
               <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[800px] bg-purple-600 rounded-full blur-[160px] animate-pulse"></div>
             </div>
             <div className="relative z-10 max-w-6xl mx-auto space-y-12">
-              <div className="mb-12 flex justify-center">
+              <div className="mb-12 flex justify-center items-center gap-8">
                 <img src={PHANT_LOGO_URL} alt="Phant" className="h-24 md:h-32 w-auto animate-in zoom-in-50 duration-1000" />
+                {metadata.clientLogo && (
+                  <>
+                    <span className="text-white/20 text-4xl font-thin">&times;</span>
+                    <img src={metadata.clientLogo} alt={metadata.clientName} className="h-20 md:h-28 w-auto animate-in zoom-in-50 duration-1000 object-contain" />
+                  </>
+                )}
               </div>
               <span className="inline-block px-6 py-2 bg-white/5 border border-white/10 rounded-full text-xs font-black uppercase tracking-[0.4em] text-white/40">
                 Proposta de Movimento Estratégico

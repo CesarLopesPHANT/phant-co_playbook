@@ -63,6 +63,7 @@ export interface ProposalMetadata {
   industry: string;
   website?: string;
   instagram?: string;
+  clientLogo?: string;
   meetingNotesPains?: string;
   meetingNotesDesires?: string;
   observations?: string;
@@ -308,6 +309,7 @@ export interface ClientRecord {
   nps?: number;
   ultima_nota?: number;
   recomendacao?: string;
+  company_logo?: string;
   financial_history: ClientFinancialMonth[];
   upsell_pipeline: ClientUpsellItem[];
   consciousness_level: ConsciousnessLevel;
