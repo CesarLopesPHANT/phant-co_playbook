@@ -1,6 +1,6 @@
 
 import { createClient } from '@supabase/supabase-js';
-import { SolutionItem, AIConfig, UserRole, ProposalRecord, ProposalItem, ProposalMetadata, AppCustomization, MonthlyGoal, AssistSession, FicharioFolder, ClientRecord, PlanningItem } from '../types';
+import { SolutionItem, AIConfig, UserRole, ProposalRecord, ProposalItem, ProposalMetadata, AppCustomization, MonthlyGoal, AssistSession, FicharioFolder, ClientRecord, PlanningItem, CadastroRecord, CadastroWithStats, CadastroStatus } from '../types';
 
 const SUPABASE_URL = 'https://wdatcopytwgykhpqshxa.supabase.co';
 
@@ -274,7 +274,7 @@ export const SupabaseService = {
 
   async saveProposal(clientName: string, industry: string, totalValue: number, consultant: string, items: ProposalItem[], metadata: ProposalMetadata) {
     try {
-      const { error } = await supabase.from('proposals_history').insert([{
+      const payload: any = {
         client_name: clientName,
         industry,
         total_value: totalValue,
@@ -282,17 +282,32 @@ export const SupabaseService = {
         items,
         metadata,
         status: 'PENDING'
-      }]);
+      };
+
+      if (metadata.cadastroId) {
+        payload.cadastro_id = metadata.cadastroId;
+        // Auto-promote LEAD → ATIVO when first proposal is created
+        await this.promoteCadastroStatus(metadata.cadastroId, 'ATIVO');
+      }
+
+      const { error } = await supabase.from('proposals_history').insert([payload]);
       if (error) throw error;
       return { success: true };
-    } catch (err: any) { 
-      return { success: false, message: err.message }; 
+    } catch (err: any) {
+      return { success: false, message: err.message };
     }
   },
   async updateProposalStatus(id: string, status: 'APPROVED' | 'REJECTED') {
     try {
+      const { data: proposal } = await supabase.from('proposals_history').select('cadastro_id').eq('id', id).single();
       const { error } = await supabase.from('proposals_history').update({ status }).eq('id', id);
       if (error) throw error;
+
+      // Auto-promote cadastro ATIVO → CLIENTE when proposal approved
+      if (status === 'APPROVED' && proposal?.cadastro_id) {
+        await this.promoteCadastroStatus(proposal.cadastro_id, 'CLIENTE');
+      }
+
       return { success: true };
     } catch (err: any) {
       return { success: false, message: err.message };
@@ -373,6 +388,117 @@ export const SupabaseService = {
     } catch { return []; }
   },
   
+  // ===================== CADASTRO GERAL =====================
+
+  async fetchCadastro(): Promise<CadastroRecord[]> {
+    try {
+      const { data, error } = await supabase.from('cadastro_geral').select('*').order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    } catch { return []; }
+  },
+
+  async fetchCadastroWithStats(): Promise<CadastroWithStats[]> {
+    try {
+      const [cadastroRes, historyRes] = await Promise.all([
+        supabase.from('cadastro_geral').select('*').order('nome', { ascending: true }),
+        supabase.from('proposals_history').select('cadastro_id, total_value, status, created_at')
+      ]);
+
+      const cadastros: CadastroRecord[] = cadastroRes.data || [];
+      const proposals = historyRes.data || [];
+
+      const statsMap = new Map<string, { total: number; valor: number; valorAprovado: number; ultima?: string }>();
+      proposals.forEach(p => {
+        if (!p.cadastro_id) return;
+        const cur = statsMap.get(p.cadastro_id) || { total: 0, valor: 0, valorAprovado: 0 };
+        cur.total++;
+        cur.valor += p.total_value || 0;
+        if (p.status === 'APPROVED') cur.valorAprovado += p.total_value || 0;
+        if (!cur.ultima || p.created_at > cur.ultima) cur.ultima = p.created_at;
+        statsMap.set(p.cadastro_id, cur);
+      });
+
+      return cadastros.map(c => {
+        const stats = statsMap.get(c.id!) || { total: 0, valor: 0, valorAprovado: 0 };
+        return {
+          ...c,
+          total_propostas: stats.total,
+          valor_total: stats.valor,
+          valor_aprovado: stats.valorAprovado,
+          ultima_proposta: stats.ultima
+        };
+      });
+    } catch { return []; }
+  },
+
+  async searchCadastro(query: string): Promise<CadastroRecord[]> {
+    try {
+      const term = `%${query}%`;
+      const { data, error } = await supabase
+        .from('cadastro_geral')
+        .select('*')
+        .or(`nome.ilike.${term},empresa.ilike.${term},email.ilike.${term}`)
+        .order('nome')
+        .limit(10);
+      if (error) throw error;
+      return data || [];
+    } catch { return []; }
+  },
+
+  async upsertCadastro(record: Partial<CadastroRecord>) {
+    try {
+      const payload = { ...record, updated_at: new Date().toISOString() };
+      const { data, error } = await supabase.from('cadastro_geral').upsert(payload, { onConflict: 'id' }).select().single();
+      if (error) throw error;
+      return { success: true, data };
+    } catch (err: any) { return { success: false, message: err.message, data: null }; }
+  },
+
+  async bulkInsertCadastro(records: Partial<CadastroRecord>[]) {
+    try {
+      const payload = records.map(r => ({ ...r, updated_at: new Date().toISOString() }));
+      const { error } = await supabase.from('cadastro_geral').insert(payload);
+      if (error) throw error;
+      return { success: true, count: records.length };
+    } catch (err: any) { return { success: false, message: err.message, count: 0 }; }
+  },
+
+  async deleteCadastro(id: string) {
+    try {
+      const { error } = await supabase.from('cadastro_geral').delete().eq('id', id);
+      if (error) throw error;
+      return { success: true };
+    } catch (err: any) { return { success: false, message: err.message }; }
+  },
+
+  async promoteCadastroStatus(id: string, newStatus: CadastroStatus) {
+    try {
+      // Não sobrescreve cadastros em CHURN — eles são inativos permanentes
+      const { data: current } = await supabase.from('cadastro_geral').select('status').eq('id', id).single();
+      if (current?.status === 'CHURN') return { success: true };
+
+      const { error } = await supabase
+        .from('cadastro_geral')
+        .update({ status: newStatus, updated_at: new Date().toISOString() })
+        .eq('id', id);
+      if (error) throw error;
+      return { success: true };
+    } catch (err: any) { return { success: false, message: err.message }; }
+  },
+
+  async fetchProposalsByCadastro(cadastroId: string): Promise<ProposalRecord[]> {
+    try {
+      const { data, error } = await supabase
+        .from('proposals_history')
+        .select('*')
+        .eq('cadastro_id', cadastroId)
+        .order('created_at', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    } catch { return []; }
+  },
+
   async fetchAIConfig(): Promise<AIConfig | null> {
     try {
       const customization = await this.fetchAppConfig();

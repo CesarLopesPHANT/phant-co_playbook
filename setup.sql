@@ -82,6 +82,7 @@ CREATE POLICY "Public access fichario" ON public.fichario FOR ALL USING (true);
 CREATE TABLE IF NOT EXISTS public.proposals_history (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     client_name TEXT NOT NULL,
+    cadastro_id UUID REFERENCES public.cadastro_geral(id) ON DELETE SET NULL,
     industry TEXT,
     total_value NUMERIC,
     consultant TEXT,
@@ -90,6 +91,14 @@ CREATE TABLE IF NOT EXISTS public.proposals_history (
     status TEXT DEFAULT 'PENDING',
     created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
 );
+
+-- Adiciona cadastro_id se tabela já existe
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'proposals_history' AND column_name = 'cadastro_id') THEN
+        ALTER TABLE public.proposals_history ADD COLUMN cadastro_id UUID REFERENCES public.cadastro_geral(id) ON DELETE SET NULL;
+    END IF;
+END $$;
 
 ALTER TABLE public.proposals_history ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public access history" ON public.proposals_history;
@@ -106,7 +115,38 @@ ALTER TABLE public.app_config ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public access config" ON public.app_config;
 CREATE POLICY "Public access config" ON public.app_config FOR ALL USING (true);
 
--- 6. TABELA DE CLIENTES (GESTÃO DE CLIENTES)
+-- 6. TABELA DE CADASTRO GERAL (CONTATOS / LEADS)
+CREATE TABLE IF NOT EXISTS public.cadastro_geral (
+    id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+    nome TEXT NOT NULL,
+    email TEXT,
+    telefone TEXT,
+    empresa TEXT,
+    cargo TEXT,
+    segmento TEXT,
+    origem TEXT,
+    status TEXT DEFAULT 'LEAD',
+    observacoes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now()),
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT timezone('utc'::text, now())
+);
+
+-- Adiciona campo projeto e proposal_id se tabela já existe
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'cadastro_geral' AND column_name = 'projeto') THEN
+        ALTER TABLE public.cadastro_geral ADD COLUMN projeto TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_name = 'cadastro_geral' AND column_name = 'proposal_id') THEN
+        ALTER TABLE public.cadastro_geral ADD COLUMN proposal_id UUID REFERENCES public.proposals_history(id) ON DELETE SET NULL;
+    END IF;
+END $$;
+
+ALTER TABLE public.cadastro_geral ENABLE ROW LEVEL SECURITY;
+DROP POLICY IF EXISTS "Public access cadastro" ON public.cadastro_geral;
+CREATE POLICY "Public access cadastro" ON public.cadastro_geral FOR ALL USING (true);
+
+-- 7. TABELA DE CLIENTES (GESTÃO DE CLIENTES)
 CREATE TABLE IF NOT EXISTS public.clients (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     company_name TEXT NOT NULL,
@@ -212,7 +252,7 @@ ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "Public access clients" ON public.clients;
 CREATE POLICY "Public access clients" ON public.clients FOR ALL USING (true);
 
--- 7. TABELA DE PLANNING (PIPELINE COMERCIAL)
+-- 8. TABELA DE PLANNING (PIPELINE COMERCIAL)
 CREATE TABLE IF NOT EXISTS public.client_planning (
     id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
     client_name TEXT NOT NULL,

@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { PlaybookModule, UserRole, SolutionItem, SolutionCategory, SolutionMaturity, ProposalItem, AppCustomization } from '../types';
+import { PlaybookModule, UserRole, SolutionItem, SolutionCategory, SolutionMaturity, ProposalItem, AppCustomization, formatCurrency } from '../types';
 import { SupabaseService } from '../services/api';
 import AdminSettings from './AdminSettings';
 import SalesDashboard from './SalesDashboard';
@@ -14,6 +14,7 @@ import PrivacyPolicy from './PrivacyPolicy';
 import TermsOfService from './TermsOfService';
 import CopilotModule from './Assist/CopilotModule';
 import ClientManagement from './ClientManagement';
+import CadastroGeral from './CadastroGeral';
 
 interface PlaybookEditorProps {
   module: PlaybookModule;
@@ -102,8 +103,7 @@ const PlaybookEditor: React.FC<PlaybookEditorProps> = ({ module, currentRole, on
     return 'bg-gray-500';
   };
 
-  const formatCurrency = (val: number) => 
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+  // formatCurrency imported from types
 
   // RENDERIZAÇÃO ESPECIAL PARA O BUILDER (LAYOUT INTEGRADO)
   if (module.type === 'pdf_builder') {
@@ -130,6 +130,7 @@ const PlaybookEditor: React.FC<PlaybookEditorProps> = ({ module, currentRole, on
   if (module.type === 'dashboard') return <SalesDashboard />;
   if (module.type === 'fichario') return <Fichario currentRole={currentRole} />;
   if (module.type === 'calculator') return <ProposalSimulator onNavigateToBuilder={() => onNavigateToModule?.('pdf_builder')} />;
+  if (module.type === 'cadastro_geral') return <CadastroGeral />;
   
   // PÁGINAS ESTÁTICAS
   if (module.id === 'cultura') return <NossaEssencia currentRole={currentRole} />;

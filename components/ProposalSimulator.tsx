@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { ProposalItem } from '../types';
+import { ProposalItem, formatCurrency } from '../types';
 import { GoogleApiService } from '../services/api';
 
 interface ProposalSimulatorProps {
@@ -31,9 +31,7 @@ const ProposalSimulator: React.FC<ProposalSimulatorProps> = ({ onNavigateToBuild
 
   const totalProposal = proposalItems.reduce((acc, curr) => acc + curr.totalPrice, 0);
 
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(value);
-  };
+  // formatCurrency imported from types
 
   const handleSaveToDrive = async () => {
     if (proposalItems.length === 0) return;

@@ -3,7 +3,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { AreaChart, Area, Tooltip, ResponsiveContainer } from 'recharts';
 import { SALES_PERFORMANCE } from '../constants';
 import { SupabaseService, GoogleApiService } from '../services/api';
-import { SolutionItem, ProposalRecord } from '../types';
+import { SolutionItem, ProposalRecord, CadastroWithStats, formatCurrencyShort } from '../types';
 
 interface CalendarEvent {
   id: string;
@@ -65,10 +65,11 @@ const RITUALS_BY_DAY: Record<number, string[]> = {
 const SalesDashboard: React.FC = () => {
   const [solutions, setSolutions] = useState<SolutionItem[]>([]);
   const [history, setHistory] = useState<ProposalRecord[]>([]);
+  const [cadastros, setCadastros] = useState<CadastroWithStats[]>([]);
   const [calendarEvents, setCalendarEvents] = useState<CalendarEvent[]>([]);
   const [isLoadingEvents, setIsLoadingEvents] = useState(true);
   const [currentMonthTarget, setCurrentMonthTarget] = useState(0);
-  
+
   // Estado para Ritos Dinâmicos
   const [checkpoints, setCheckpoints] = useState<{id: number, text: string, done: boolean}[]>([]);
 
@@ -81,6 +82,10 @@ const SalesDashboard: React.FC = () => {
       // Carregar Histórico Real
       const hist = await SupabaseService.fetchProposalsHistory();
       setHistory(hist || []);
+
+      // Carregar Cadastros com Stats (para churn/LT)
+      const cad = await SupabaseService.fetchCadastroWithStats();
+      setCadastros(cad || []);
 
       // Carregar Metas do Mês
       const goals = await SupabaseService.fetchGoals();
@@ -106,23 +111,52 @@ const SalesDashboard: React.FC = () => {
     setCheckpoints(prev => prev.map(c => c.id === id ? { ...c, done: !c.done } : c));
   };
 
-  // Cálculos Derivados
-  const totalPipelineValue = useMemo(() => {
-    return history.reduce((acc, curr) => acc + (curr.total_value || 0), 0);
-  }, [history]);
+  // IDs de cadastros em CHURN — usados para excluir das áreas de atenção
+  const churnIds = useMemo(() => {
+    return new Set(cadastros.filter(c => c.status === 'CHURN').map(c => c.id));
+  }, [cadastros]);
 
-  // Filtra apenas o realizado no mês atual para o gráfico de progresso
+  // Métricas de Churn e Lifetime (base de cálculo)
+  const churnMetrics = useMemo(() => {
+    const clientesEChurn = cadastros.filter(c => c.status === 'CLIENTE' || c.status === 'CHURN');
+    const totalBase = clientesEChurn.length;
+    const churned = cadastros.filter(c => c.status === 'CHURN');
+    const churnCount = churned.length;
+    const churnRate = totalBase > 0 ? (churnCount / totalBase) * 100 : 0;
+
+    // Lifetime médio (meses entre created_at e última proposta dos cadastros em CHURN)
+    let avgLifetime = 0;
+    if (churned.length > 0) {
+      const lifetimes = churned.map(c => {
+        const start = new Date(c.created_at || Date.now());
+        const end = c.ultima_proposta ? new Date(c.ultima_proposta) : new Date();
+        return Math.max(1, Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24 * 30)));
+      });
+      avgLifetime = Math.round(lifetimes.reduce((a, b) => a + b, 0) / lifetimes.length);
+    }
+
+    return { churnRate, churnCount, totalBase, avgLifetime };
+  }, [cadastros]);
+
+  // Cálculos Derivados — exclui cadastros CHURN das áreas de atenção
+  const totalPipelineValue = useMemo(() => {
+    return history
+      .filter(h => !churnIds.has(h.metadata?.cadastroId))
+      .reduce((acc, curr) => acc + (curr.total_value || 0), 0);
+  }, [history, churnIds]);
+
+  // Filtra apenas o realizado no mês atual (exclui CHURN)
   const currentMonthRealized = useMemo(() => {
     const currentKey = new Date().toISOString().slice(0, 7);
     return history
-      .filter(p => p.created_at.startsWith(currentKey))
+      .filter(p => p.created_at.startsWith(currentKey) && !churnIds.has(p.metadata?.cadastroId))
       .reduce((acc, curr) => acc + (curr.total_value || 0), 0);
-  }, [history]);
+  }, [history, churnIds]);
 
-  // Propostas Pendentes ("Na Mesa")
+  // Propostas Pendentes ("Na Mesa") — exclui cadastros em CHURN
   const pendingProposals = useMemo(() => {
-    return history.filter(h => h.status === 'PENDING' || !h.status);
-  }, [history]);
+    return history.filter(h => (h.status === 'PENDING' || !h.status) && !churnIds.has(h.metadata?.cadastroId));
+  }, [history, churnIds]);
 
   const totalPendingValue = pendingProposals.reduce((acc, curr) => acc + curr.total_value, 0);
 
@@ -149,7 +183,20 @@ const SalesDashboard: React.FC = () => {
       .slice(0, 3);
   }, [history]);
 
-  const formatCurrency = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(val);
+  // Client funnel metrics
+  const clientFunnel = useMemo(() => {
+    const leads = cadastros.filter(c => c.status === 'LEAD').length;
+    const ativos = cadastros.filter(c => c.status === 'ATIVO').length;
+    const clientes = cadastros.filter(c => c.status === 'CLIENTE').length;
+    const total = cadastros.length;
+    const conversionRate = total > 0 ? Math.round((clientes / total) * 100) : 0;
+    const ticketMedio = clientes > 0
+      ? cadastros.filter(c => c.status === 'CLIENTE').reduce((acc, c) => acc + c.valor_aprovado, 0) / clientes
+      : 0;
+    return { leads, ativos, clientes, total, conversionRate, ticketMedio };
+  }, [cadastros]);
+
+  const formatCurrency = formatCurrencyShort;
 
   const formatTime = (event: CalendarEvent) => {
     const dateStr = event.start.dateTime || event.start.date;
@@ -331,11 +378,54 @@ const SalesDashboard: React.FC = () => {
              </p>
           </div>
 
-          <div className="app-card p-10 bg-gray-50 border border-gray-100 text-center space-y-6 flex flex-col justify-center h-full max-h-[300px]">
-             <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest block">A Nossa Essência</span>
-             <p className="text-2xl font-black text-gray-900 tracking-tighter italic leading-none">
-                "Crescimento é <br/> Movimento <br/> Estratégico."
+          <div className="app-card p-10 bg-white border border-red-100 space-y-6">
+             <span className="text-[9px] font-black text-red-400 uppercase tracking-[0.3em]">Saúde da Base</span>
+             <div className="grid grid-cols-2 gap-4">
+                <div className="p-4 bg-red-50 rounded-2xl">
+                   <span className="text-[8px] font-black text-red-400 uppercase block mb-1">Churn Rate</span>
+                   <span className="text-2xl font-black text-red-600 tracking-tight">{churnMetrics.churnRate.toFixed(1)}%</span>
+                   <span className="block text-[8px] font-bold text-red-300 mt-1">{churnMetrics.churnCount} de {churnMetrics.totalBase}</span>
+                </div>
+                <div className="p-4 bg-gray-50 rounded-2xl">
+                   <span className="text-[8px] font-black text-gray-400 uppercase block mb-1">Lifetime Médio</span>
+                   <span className="text-2xl font-black text-gray-900 tracking-tight">{churnMetrics.avgLifetime || '—'}</span>
+                   <span className="block text-[8px] font-bold text-gray-300 mt-1">{churnMetrics.avgLifetime ? 'meses' : 'sem dados'}</span>
+                </div>
+             </div>
+             <p className="text-[10px] text-gray-400 font-medium leading-relaxed">
+                Cadastros em <span className="font-black text-red-500">CHURN</span> são inativos permanentes, excluídos das áreas de atenção.
              </p>
+          </div>
+
+          <div className="app-card p-10 bg-white border border-gray-100 space-y-6">
+             <span className="text-[9px] font-black text-purple-500 uppercase tracking-[0.3em]">Funil de Clientes</span>
+             <div className="space-y-3">
+                {[
+                  { label: 'Leads', count: clientFunnel.leads, color: 'bg-amber-400', width: clientFunnel.total > 0 ? (clientFunnel.leads / clientFunnel.total) * 100 : 0 },
+                  { label: 'Ativos', count: clientFunnel.ativos, color: 'bg-emerald-500', width: clientFunnel.total > 0 ? (clientFunnel.ativos / clientFunnel.total) * 100 : 0 },
+                  { label: 'Clientes', count: clientFunnel.clientes, color: 'bg-blue-600', width: clientFunnel.total > 0 ? (clientFunnel.clientes / clientFunnel.total) * 100 : 0 },
+                ].map((stage, i) => (
+                  <div key={i} className="space-y-1">
+                    <div className="flex justify-between items-center">
+                      <span className="text-[9px] font-black text-gray-500 uppercase tracking-widest">{stage.label}</span>
+                      <span className="text-[11px] font-black text-gray-900">{stage.count}</span>
+                    </div>
+                    <div className="h-2 bg-gray-100 rounded-full overflow-hidden">
+                      <div className={`h-full ${stage.color} rounded-full transition-all duration-700`} style={{ width: `${Math.max(stage.width, 2)}%` }}></div>
+                    </div>
+                  </div>
+                ))}
+             </div>
+             <div className="grid grid-cols-2 gap-3 pt-4 border-t border-gray-50">
+                <div className="p-3 bg-purple-50 rounded-xl text-center">
+                   <span className="text-[8px] font-black text-purple-400 uppercase block mb-1">Conversão</span>
+                   <span className="text-lg font-black text-purple-700">{clientFunnel.conversionRate}%</span>
+                </div>
+                <div className="p-3 bg-gray-50 rounded-xl text-center">
+                   <span className="text-[8px] font-black text-gray-400 uppercase block mb-1">Ticket Médio</span>
+                   <span className="text-lg font-black text-gray-900">{formatCurrency(clientFunnel.ticketMedio)}</span>
+                </div>
+             </div>
           </div>
         </div>
       </div>

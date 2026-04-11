@@ -199,6 +199,18 @@ export const PLAYBOOK_STRUCTURE: PlaybookModule[] = [
     ]
   },
   {
+    id: 'cadastro_geral',
+    category: 'EXECUCAO',
+    title: 'Cadastro Geral',
+    description: 'CRM com funil de vendas, importação CSV e vínculo com propostas.',
+    status: 'ATIVA',
+    version: '1.0',
+    source: 'Manual',
+    type: 'cadastro_geral',
+    icon: 'cadastro',
+    permissions: ['MASTER', 'USER']
+  },
+  {
     id: 'admin',
     category: 'SISTEMA',
     title: 'Configurações',

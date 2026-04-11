@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect, useRef, useMemo } from 'react';
-import { ProposalItem, StrategicMapItem, ProposalMetadata, SolutionItem, ProposalRecord, AppCustomization, ProposalSections } from '../types';
+import { ProposalItem, StrategicMapItem, ProposalMetadata, SolutionItem, ProposalRecord, AppCustomization, ProposalSections, CadastroRecord, formatCurrency } from '../types';
 import { generateStrategicMapping, improveObservationText } from '../services/gemini';
 import { SupabaseService } from '../services/api';
 import ProposalPresentation from './ProposalPresentation';
@@ -60,6 +60,17 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [validationError, setValidationError] = useState<string | null>(null);
 
+  // --- APPROVAL CADASTRO MODAL ---
+  const [approvalRecord, setApprovalRecord] = useState<ProposalRecord | null>(null);
+  const [approvalCadastro, setApprovalCadastro] = useState<Partial<CadastroRecord>>({});
+  const [isSavingApproval, setIsSavingApproval] = useState(false);
+  const [approvalErrors, setApprovalErrors] = useState<string[]>([]);
+
+  const [clientSearch, setClientSearch] = useState('');
+  const [clientResults, setClientResults] = useState<CadastroRecord[]>([]);
+  const [showClientDropdown, setShowClientDropdown] = useState(false);
+  const clientSearchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
   const previewRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -93,8 +104,32 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
   const finalTotal = Math.max(0, subTotal - discountAmount);
   const installmentValue = useMemo(() => finalTotal / (metadata.installments || 1), [finalTotal, metadata.installments]);
 
-  const formatCurrency = (val: number) => 
-    new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+  const searchClients = (query: string) => {
+    setClientSearch(query);
+    setMetadata({ ...metadata, clientName: query.toUpperCase() });
+    if (validationError) setValidationError(null);
+
+    if (clientSearchTimer.current) clearTimeout(clientSearchTimer.current);
+    if (query.length < 2) { setClientResults([]); setShowClientDropdown(false); return; }
+
+    clientSearchTimer.current = setTimeout(async () => {
+      const results = await SupabaseService.searchCadastro(query);
+      setClientResults(results);
+      setShowClientDropdown(results.length > 0);
+    }, 300);
+  };
+
+  const selectClient = (client: CadastroRecord) => {
+    setMetadata({
+      ...metadata,
+      clientName: client.nome.toUpperCase(),
+      industry: client.segmento || metadata.industry,
+      cadastroId: client.id,
+    });
+    setClientSearch(client.nome.toUpperCase());
+    setShowClientDropdown(false);
+    setClientResults([]);
+  };
 
   const handleGenerateAI = async () => {
     if (!metadata.clientName) {
@@ -185,13 +220,74 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
     }
   };
 
+  const handleApproveClick = (record: ProposalRecord) => {
+    const serviceDescription = record.items.map(i => i.name).join(', ');
+    setApprovalRecord(record);
+    setApprovalCadastro({
+      nome: record.client_name || '',
+      email: '',
+      telefone: '',
+      empresa: '',
+      cargo: '',
+      segmento: record.industry || '',
+      origem: 'Proposta Aprovada',
+      status: 'CLIENTE',
+      observacoes: '',
+      projeto: serviceDescription,
+      proposal_id: record.id,
+    });
+    setApprovalErrors([]);
+  };
+
+  const APPROVAL_REQUIRED_FIELDS: { key: keyof CadastroRecord; label: string }[] = [
+    { key: 'nome', label: 'Nome' },
+    { key: 'email', label: 'E-mail' },
+    { key: 'telefone', label: 'Telefone' },
+    { key: 'empresa', label: 'Empresa' },
+    { key: 'cargo', label: 'Cargo' },
+    { key: 'segmento', label: 'Segmento' },
+    { key: 'origem', label: 'Origem' },
+    { key: 'projeto', label: 'Projeto' },
+  ];
+
+  const handleConfirmApproval = async () => {
+    const missing = APPROVAL_REQUIRED_FIELDS.filter(f => !((approvalCadastro as any)[f.key] || '').toString().trim());
+    if (missing.length > 0) {
+      setApprovalErrors(missing.map(f => f.key));
+      return;
+    }
+    if (!approvalRecord) return;
+
+    setIsSavingApproval(true);
+    try {
+      const cadastroRes = await SupabaseService.upsertCadastro(approvalCadastro);
+      if (!cadastroRes.success) {
+        showError('Erro ao salvar cadastro: ' + cadastroRes.message);
+        return;
+      }
+
+      const res = await SupabaseService.updateProposalStatus(approvalRecord.id, 'APPROVED');
+      if (res.success) {
+        setProposalHistory(prev => prev.map(p => p.id === approvalRecord.id ? { ...p, status: 'APPROVED' } : p));
+        exportTasksToExcel(approvalRecord);
+        setApprovalRecord(null);
+        setApprovalCadastro({});
+      } else {
+        showError('Erro ao atualizar status da proposta');
+      }
+    } finally {
+      setIsSavingApproval(false);
+    }
+  };
+
   const updateStatus = async (record: ProposalRecord, newStatus: 'APPROVED' | 'REJECTED') => {
+    if (newStatus === 'APPROVED') {
+      handleApproveClick(record);
+      return;
+    }
     const res = await SupabaseService.updateProposalStatus(record.id, newStatus);
     if (res.success) {
         setProposalHistory(prev => prev.map(p => p.id === record.id ? { ...p, status: newStatus } : p));
-        if (newStatus === 'APPROVED') {
-          exportTasksToExcel(record);
-        }
     } else {
         showError("Erro ao atualizar status");
     }
@@ -531,17 +627,36 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
                      </div>
                   </div>
 
-                  <div className="space-y-2">
+                  <div className="space-y-2 relative">
                     <label className={`text-[10px] font-black uppercase tracking-widest ml-2 transition-colors ${validationError ? 'text-red-500' : 'text-gray-300'}`}>Nome do Cliente</label>
-                    <input 
-                      value={metadata.clientName}
-                      onChange={e => {
-                        setMetadata({...metadata, clientName: e.target.value.toUpperCase()});
-                        if (validationError) setValidationError(null);
-                      }}
+                    <input
+                      value={clientSearch || metadata.clientName}
+                      onChange={e => searchClients(e.target.value)}
+                      onFocus={() => clientResults.length > 0 && setShowClientDropdown(true)}
+                      onBlur={() => setTimeout(() => setShowClientDropdown(false), 200)}
                       className="w-full bg-gray-50 border-transparent border focus:border-brand p-4 rounded-2xl font-black text-sm outline-none transition-all"
-                      placeholder="CLIENTE EXEMPLO"
+                      placeholder="Buscar no cadastro ou digitar..."
                     />
+                    {metadata.cadastroId && (
+                      <span className="absolute right-4 top-[38px] text-[8px] font-black text-emerald-500 uppercase tracking-widest">Vinculado</span>
+                    )}
+                    {showClientDropdown && clientResults.length > 0 && (
+                      <div className="absolute z-50 top-full left-0 right-0 mt-1 bg-white rounded-2xl border border-gray-100 shadow-2xl overflow-hidden max-h-48 overflow-y-auto">
+                        {clientResults.map(client => (
+                          <button
+                            key={client.id}
+                            onMouseDown={() => selectClient(client)}
+                            className="w-full text-left px-4 py-3 hover:bg-gray-50 transition-colors flex justify-between items-center border-b border-gray-50 last:border-0"
+                          >
+                            <div>
+                              <span className="text-[11px] font-black text-gray-900">{client.nome}</span>
+                              {client.empresa && <span className="text-[9px] text-gray-400 ml-2">{client.empresa}</span>}
+                            </div>
+                            <span className={`px-2 py-0.5 rounded text-[7px] font-black uppercase ${client.status === 'CLIENTE' ? 'bg-blue-100 text-blue-600' : client.status === 'ATIVO' ? 'bg-emerald-100 text-emerald-600' : 'bg-amber-100 text-amber-600'}`}>{client.status}</span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-2">
@@ -689,9 +804,9 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
                        
                        <div className="flex gap-2 mt-4 pt-4 border-t border-gray-100">
                           {record.status !== 'APPROVED' && (
-                            <button 
+                            <button
                               onClick={(e) => { e.stopPropagation(); updateStatus(record, 'APPROVED'); }}
-                              className="flex-1 py-2 bg-green-50 text-green-600 rounded-xl text-[9px] font-black uppercase hover:bg-green-500 hover:text-white transition-all"
+                              className="flex-1 py-3 bg-green-500 text-white rounded-xl text-[10px] font-black uppercase tracking-wider hover:bg-green-600 transition-all shadow-lg shadow-green-500/30 ring-2 ring-green-400/50 animate-pulse hover:animate-none"
                             >
                               ✓ Aprovar
                             </button>
@@ -1042,6 +1157,130 @@ const ProposalBuilder: React.FC<ProposalBuilderProps> = ({ appConfig }) => {
             </div>
         )}
       </div>
+
+      {/* --- MODAL: CADASTRO DO CLIENTE NA APROVAÇÃO --- */}
+      {approvalRecord && (
+        <div className="fixed inset-0 bg-black/90 backdrop-blur-2xl z-[200] flex items-center justify-center p-6 animate-in fade-in duration-300">
+          <div className="bg-white w-full max-w-2xl rounded-[40px] p-10 shadow-2xl animate-in zoom-in-95 duration-500 max-h-[90vh] overflow-y-auto custom-scrollbar">
+            <div className="flex justify-between items-start mb-6">
+              <div>
+                <h2 className="text-3xl font-black text-gray-900 tracking-tighter">Cadastro do Cliente</h2>
+                <p className="text-sm text-gray-400 font-medium mt-1">
+                  Preencha todos os dados para aprovar a proposta de <span className="font-black text-green-600">{approvalRecord.client_name}</span>
+                </p>
+                <p className="text-[10px] text-green-600 font-black uppercase tracking-widest mt-2 flex items-center gap-2">
+                  <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                  Proposta: {formatCurrency(approvalRecord.total_value)}
+                </p>
+              </div>
+              <button
+                onClick={() => { setApprovalRecord(null); setApprovalCadastro({}); }}
+                className="w-10 h-10 bg-gray-50 rounded-full flex items-center justify-center hover:bg-black hover:text-white transition-all shrink-0"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              {[
+                { key: 'nome', label: 'Nome *', placeholder: 'Nome completo' },
+                { key: 'email', label: 'E-mail *', placeholder: 'email@empresa.com' },
+                { key: 'telefone', label: 'Telefone *', placeholder: '(11) 99999-9999' },
+                { key: 'empresa', label: 'Empresa *', placeholder: 'Nome da empresa' },
+                { key: 'cargo', label: 'Cargo *', placeholder: 'Cargo / função' },
+                { key: 'segmento', label: 'Segmento *', placeholder: 'Ex: Tecnologia, Varejo...' },
+                { key: 'origem', label: 'Origem *', placeholder: 'Ex: Indicação, Site, LinkedIn...' },
+              ].map(field => (
+                <div key={field.key} className="space-y-1.5">
+                  <label className={`text-[9px] font-black uppercase tracking-widest ${approvalErrors.includes(field.key) ? 'text-red-500' : 'text-gray-400'}`}>{field.label}</label>
+                  <input
+                    type="text"
+                    placeholder={field.placeholder}
+                    value={(approvalCadastro as any)[field.key] || ''}
+                    onChange={(e) => {
+                      setApprovalCadastro({ ...approvalCadastro, [field.key]: e.target.value });
+                      setApprovalErrors(prev => prev.filter(k => k !== field.key));
+                    }}
+                    className={`w-full px-4 py-3 bg-gray-50 border rounded-xl text-sm font-bold text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 transition-all ${approvalErrors.includes(field.key) ? 'border-red-300 focus:ring-red-200' : 'border-gray-100 focus:ring-black/10'}`}
+                  />
+                </div>
+              ))}
+
+              <div className="space-y-1.5">
+                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Status</label>
+                <div className="w-full px-4 py-3 bg-green-50 border border-green-200 rounded-xl text-sm font-black text-green-700">
+                  CLIENTE
+                </div>
+              </div>
+
+              <div className="md:col-span-2 space-y-1.5">
+                <label className={`text-[9px] font-black uppercase tracking-widest ${approvalErrors.includes('projeto') ? 'text-red-500' : 'text-green-600'}`}>Projeto (Serviço Contratado) *</label>
+                <textarea
+                  placeholder="Descrição do serviço / projeto contratado..."
+                  value={approvalCadastro.projeto || ''}
+                  onChange={(e) => {
+                    setApprovalCadastro({ ...approvalCadastro, projeto: e.target.value });
+                    setApprovalErrors(prev => prev.filter(k => k !== 'projeto'));
+                  }}
+                  rows={3}
+                  className={`w-full px-4 py-3 bg-gray-50 border rounded-xl text-sm font-bold text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 transition-all resize-none ${approvalErrors.includes('projeto') ? 'border-red-300 focus:ring-red-200' : 'border-gray-100 focus:ring-black/10'}`}
+                />
+              </div>
+
+              <div className="md:col-span-2 space-y-1.5">
+                <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">Observações</label>
+                <textarea
+                  placeholder="Notas adicionais sobre o cliente..."
+                  value={approvalCadastro.observacoes || ''}
+                  onChange={(e) => setApprovalCadastro({ ...approvalCadastro, observacoes: e.target.value })}
+                  rows={2}
+                  className="w-full px-4 py-3 bg-gray-50 border border-gray-100 rounded-xl text-sm font-bold text-gray-900 placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-black/10 transition-all resize-none"
+                />
+              </div>
+
+              {/* PDF Anexado Indicator */}
+              <div className="md:col-span-2 p-4 bg-emerald-50 border border-emerald-200 rounded-2xl flex items-center gap-3">
+                <div className="w-10 h-10 bg-emerald-100 rounded-xl flex items-center justify-center shrink-0">
+                  <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className="text-emerald-600">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+                    <polyline points="14 2 14 8 20 8" />
+                    <line x1="16" y1="13" x2="8" y2="13" />
+                    <line x1="16" y1="17" x2="8" y2="17" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-[10px] font-black text-emerald-700 uppercase tracking-widest">PDF da Proposta Vinculado</p>
+                  <p className="text-[11px] font-medium text-emerald-600 mt-0.5">
+                    A proposta de {formatCurrency(approvalRecord.total_value)} ficará anexada ao cadastro deste cliente.
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            {approvalErrors.length > 0 && (
+              <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-xl">
+                <p className="text-[10px] font-black text-red-500 uppercase tracking-widest">Preencha todos os campos obrigatórios</p>
+              </div>
+            )}
+
+            <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-gray-100">
+              <button
+                onClick={() => { setApprovalRecord(null); setApprovalCadastro({}); }}
+                className="px-8 py-4 rounded-2xl bg-gray-50 text-gray-400 font-black text-[10px] uppercase tracking-widest hover:bg-gray-100 transition-all"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmApproval}
+                disabled={isSavingApproval}
+                className="px-10 py-4 rounded-2xl bg-green-500 text-white font-black text-[10px] uppercase tracking-widest hover:bg-green-600 transition-all shadow-lg shadow-green-500/30 disabled:opacity-50"
+              >
+                {isSavingApproval ? 'Salvando...' : 'Aprovar e Cadastrar Cliente'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

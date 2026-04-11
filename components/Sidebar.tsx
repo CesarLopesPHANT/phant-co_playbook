@@ -16,7 +16,7 @@ interface SidebarProps {
 const Sidebar: React.FC<SidebarProps> = ({ modules, selectedModuleId, onSelectModule, currentRole, user, appConfig }) => {
   const [isWorkspaceConnected, setIsWorkspaceConnected] = useState(false);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
-  const categories = ['SISTEMA', 'BASE', 'FERRAMENTAS', 'PRODUTIZACAO'];
+  const categories = ['SISTEMA', 'BASE', 'FERRAMENTAS', 'PRODUTIZACAO', 'EXECUCAO'];
   
   const filteredModules = modules.filter(m => m.permissions.includes(currentRole));
   const adminModule = filteredModules.find(m => m.id === 'admin');
@@ -89,7 +89,7 @@ const Sidebar: React.FC<SidebarProps> = ({ modules, selectedModuleId, onSelectMo
           return (
             <div key={cat} className="space-y-1">
               <span className="hidden md:block text-[9px] font-black text-gray-300 uppercase tracking-[0.2em] ml-4 mb-3">
-                {cat === 'BASE' ? 'Fundamentos' : cat === 'PRODUTIZACAO' ? 'Catálogo' : cat === 'FERRAMENTAS' ? 'Operacional' : 'Geral'}
+                {cat === 'BASE' ? 'Fundamentos' : cat === 'PRODUTIZACAO' ? 'Catálogo' : cat === 'FERRAMENTAS' ? 'Operacional' : cat === 'EXECUCAO' ? 'Execução' : 'Geral'}
               </span>
               {catModules.map(m => {
                 if (m.subModules && m.subModules.length > 0) {

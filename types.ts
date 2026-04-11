@@ -61,6 +61,7 @@ export interface StrategicMapItem {
 export interface ProposalMetadata {
   clientName: string;
   industry: string;
+  cadastroId?: string;
   website?: string;
   instagram?: string;
   clientLogo?: string;
@@ -145,7 +146,39 @@ export interface PlaybookModule {
   subModules?: PlaybookModule[];
 }
 
-export type ContentType = 'page' | 'database' | 'template' | 'asset' | 'calculator' | 'script' | 'sla_rule' | 'learning_path' | 'admin' | 'dashboard' | 'fichario' | 'pdf_builder' | 'presentation' | 'copilot' | 'client_management';
+export type ContentType = 'page' | 'database' | 'template' | 'asset' | 'calculator' | 'script' | 'sla_rule' | 'learning_path' | 'admin' | 'dashboard' | 'fichario' | 'pdf_builder' | 'presentation' | 'copilot' | 'client_management' | 'cadastro_geral';
+
+export interface CadastroRecord {
+  id?: string;
+  nome: string;
+  email?: string;
+  telefone?: string;
+  empresa?: string;
+  cargo?: string;
+  segmento?: string;
+  origem?: string;
+  status: CadastroStatus;
+  observacoes?: string;
+  projeto?: string;
+  proposal_id?: string;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export type CadastroStatus = 'LEAD' | 'ATIVO' | 'CLIENTE' | 'INATIVO' | 'CHURN';
+
+export interface CadastroWithStats extends CadastroRecord {
+  total_propostas: number;
+  valor_total: number;
+  valor_aprovado: number;
+  ultima_proposta?: string;
+}
+
+export const formatCurrency = (val: number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+
+export const formatCurrencyShort = (val: number) =>
+  new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 }).format(val);
 
 export interface ChatMessage {
   role: 'user' | 'assistant';
