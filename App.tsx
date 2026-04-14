@@ -8,6 +8,7 @@ import TermsOfService from './components/TermsOfService';
 import { PLAYBOOK_STRUCTURE } from './constants';
 import { UserRole, AppCustomization } from './types';
 import { AuthService, supabase, getAppOrigin, SupabaseService } from './services/api';
+import { recordVisit } from './components/MyDay';
 
 const App: React.FC = () => {
   const [session, setSession] = useState<any>(null);
@@ -307,19 +308,28 @@ FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
   const selectedModule = PLAYBOOK_STRUCTURE.find(m => m.id === selectedModuleId)
     || PLAYBOOK_STRUCTURE.flatMap(m => m.subModules || []).find(sub => sub.id === selectedModuleId);
 
+  const handleSelectModule = (id: string | null) => {
+    setSelectedModuleId(id);
+    if (id && id !== 'dashboard') {
+      const m = PLAYBOOK_STRUCTURE.find(x => x.id === id)
+        || PLAYBOOK_STRUCTURE.flatMap(x => x.subModules || []).find(s => s.id === id);
+      if (m) recordVisit(m.id, m.title);
+    }
+  };
+
   return (
     <div className="flex h-screen bg-gray-50 overflow-hidden font-sans">
       <Sidebar 
         modules={PLAYBOOK_STRUCTURE} 
         selectedModuleId={selectedModuleId} 
-        onSelectModule={setSelectedModuleId}
+        onSelectModule={handleSelectModule}
         currentRole={currentRole}
         user={{ ...session.user, profile: userProfile }}
         appConfig={appConfig}
       />
       <main className="flex-1 overflow-y-auto relative custom-scrollbar">
         <div className="p-8 md:p-16 max-w-[1600px] mx-auto">
-          {selectedModule && <PlaybookEditor module={selectedModule} currentRole={currentRole} appConfig={appConfig} userProfile={userProfile} />}
+          {selectedModule && <PlaybookEditor module={selectedModule} currentRole={currentRole} appConfig={appConfig} userProfile={userProfile} onNavigateToModule={handleSelectModule} />}
         </div>
       </main>
       <AIAssistant currentRole={currentRole} />

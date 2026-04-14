@@ -5,7 +5,7 @@ export const PLAYBOOK_STRUCTURE: PlaybookModule[] = [
     id: 'dashboard',
     category: 'SISTEMA',
     title: 'Meu Dia',
-    description: 'Suas recomendações, metas e ritmo comercial hoje.',
+    description: 'Suas atividades recentes, atalhos e o jeito Phant de trabalhar.',
     status: 'ATIVA',
     version: '',
     source: 'Manual',

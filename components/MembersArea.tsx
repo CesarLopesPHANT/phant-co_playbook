@@ -1,6 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { UserRole } from '../types';
 import { SupabaseService } from '../services/api';
+import MarketingScienceTrack from './tracks/MarketingScienceTrack';
 
 type Area = 'onboarding' | 'growth' | 'lives' | 'branding' | 'marketing';
 
@@ -286,6 +287,17 @@ const MembersArea: React.FC<Props> = ({ currentRole, userProfile }) => {
           </div>
         </div>
       </div>
+    );
+  }
+
+  // ============ CUSTOM LAYOUT: MARKETING CIENTÍFICO ============
+  if (activeTrack && activeTrack.id === 'marketing-cientifico') {
+    return (
+      <MarketingScienceTrack
+        userId={userId}
+        userName={userName}
+        onBack={() => { setActiveTrack(null); loadRows(); }}
+      />
     );
   }
 

@@ -16,6 +16,7 @@ import CopilotModule from './Assist/CopilotModule';
 import ClientManagement from './ClientManagement';
 import CadastroGeral from './CadastroGeral';
 import MembersArea from './MembersArea';
+import MyDay from './MyDay';
 
 interface PlaybookEditorProps {
   module: PlaybookModule;
@@ -129,7 +130,7 @@ const PlaybookEditor: React.FC<PlaybookEditorProps> = ({ module, currentRole, on
     return <ClientManagement currentRole={currentRole} initialView={(viewMap[module.id] || 'dashboard') as any} appConfig={appConfig} />;
   }
   if (module.type === 'admin') return <AdminSettings />;
-  if (module.type === 'dashboard') return <SalesDashboard />;
+  if (module.type === 'dashboard') return <MyDay currentRole={currentRole} userProfile={userProfile} onNavigate={onNavigateToModule} />;
   if (module.type === 'fichario') return <Fichario currentRole={currentRole} />;
   if (module.type === 'calculator') return <ProposalSimulator onNavigateToBuilder={() => onNavigateToModule?.('pdf_builder')} />;
   if (module.type === 'cadastro_geral') return <CadastroGeral />;
