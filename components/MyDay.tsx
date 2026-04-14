@@ -14,6 +14,16 @@ interface RecentVisit {
   ts: number;
 }
 
+const PHANT_TIPS = [
+  'Antes de mandar a proposta, releia a promessa: ela responde uma dor real do cliente?',
+  'Toda call deve sair com um próximo passo agendado. Sem agenda, é fantasia.',
+  'Cliente em risco: ligue antes que ele ligue. Antecipação é cuidado.',
+  'Use o Fichário antes de criar do zero — quase tudo já existe.',
+  'Documente o que funcionou. Aprendizado individual vira ativo coletivo.',
+  'Revisar CRM toda manhã economiza dores de cabeça à tarde.',
+  'Trilhas de Treinamento abertas? Termine uma antes de começar outra.',
+];
+
 const PHANT_REMINDERS = [
   {
     title: 'Marketing é ciência, não achismo.',
@@ -81,6 +91,16 @@ const MyDay: React.FC<Props> = ({ userProfile, onNavigate }) => {
 
   const [visits, setVisits] = useState<RecentVisit[]>([]);
   const [lastLesson, setLastLesson] = useState<{ track_id: string; lesson_id: string; updated_at?: string } | null>(null);
+  const [stats, setStats] = useState<{
+    trainingDone: number;
+    trainingTotal: number;
+    clientsTotal: number;
+    clientsAtRisk: number;
+    proposalsMonth: number;
+    proposalsValue: number;
+    leadsTotal: number;
+    leadsHot: number;
+  } | null>(null);
 
   useEffect(() => {
     try {
@@ -90,20 +110,60 @@ const MyDay: React.FC<Props> = ({ userProfile, onNavigate }) => {
   }, []);
 
   useEffect(() => {
-    if (!userId) return;
-    SupabaseService.fetchTrainingProgress(userId).then((rows: any[]) => {
-      if (!rows || rows.length === 0) return;
-      const sorted = [...rows].sort((a, b) =>
-        new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime()
-      );
-      setLastLesson(sorted[0]);
-    });
+    let cancelled = false;
+    (async () => {
+      const [trainingRows, clients, proposals, cadastro] = await Promise.all([
+        userId ? SupabaseService.fetchTrainingProgress(userId) : Promise.resolve([] as any[]),
+        SupabaseService.fetchClients().catch(() => []),
+        SupabaseService.fetchProposalsHistory().catch(() => []),
+        SupabaseService.fetchCadastro().catch(() => []),
+      ]);
+      if (cancelled) return;
+
+      if (trainingRows && trainingRows.length > 0) {
+        const sorted = [...trainingRows].sort((a: any, b: any) =>
+          new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime()
+        );
+        setLastLesson(sorted[0]);
+      }
+
+      const trainingDone = (trainingRows || []).filter((r: any) => r.completed).length;
+
+      const now = new Date();
+      const monthKey = `${now.getFullYear()}-${now.getMonth()}`;
+      const proposalsMonth = (proposals || []).filter((p: any) => {
+        const d = new Date(p.created_at);
+        return `${d.getFullYear()}-${d.getMonth()}` === monthKey;
+      });
+
+      setStats({
+        trainingDone,
+        trainingTotal: (trainingRows || []).length,
+        clientsTotal: (clients || []).filter((c: any) => c.status !== 'churned').length,
+        clientsAtRisk: (clients || []).filter((c: any) =>
+          c.health === 'at_risk' || c.health === 'churn_risk' || c.health_status === 'at_risk' || c.health_status === 'churn_risk'
+        ).length,
+        proposalsMonth: proposalsMonth.length,
+        proposalsValue: proposalsMonth.reduce((s: number, p: any) => s + (Number(p.total_value) || 0), 0),
+        leadsTotal: (cadastro || []).length,
+        leadsHot: (cadastro || []).filter((c: any) => (c.status || '').toUpperCase() === 'HOT' || (c.status || '').toUpperCase() === 'QUENTE').length,
+      });
+    })();
+    return () => { cancelled = true; };
   }, [userId]);
 
   const reminder = useMemo(() => {
     const day = Math.floor(Date.now() / 86400000);
     return PHANT_REMINDERS[day % PHANT_REMINDERS.length];
   }, []);
+
+  const tip = useMemo(() => {
+    const day = Math.floor(Date.now() / 86400000);
+    return PHANT_TIPS[day % PHANT_TIPS.length];
+  }, []);
+
+  const fmtBRL = (v: number) =>
+    v >= 1000 ? `R$ ${(v / 1000).toFixed(v >= 10000 ? 0 : 1)}k` : `R$ ${v.toFixed(0)}`;
 
   const greeting = useMemo(() => {
     const h = new Date().getHours();
@@ -123,6 +183,69 @@ const MyDay: React.FC<Props> = ({ userProfile, onNavigate }) => {
         <p className="text-sm font-bold text-gray-500">
           Continue de onde parou e siga construindo o jeito Phant.
         </p>
+      </div>
+
+      {/* KPIs RESUMO */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-10">
+        <button
+          onClick={() => onNavigate?.('treinamento')}
+          className="text-left bg-white border border-gray-100 rounded-[28px] p-7 hover:border-gray-200 hover:shadow-md transition-all"
+        >
+          <div className="text-[8px] font-black text-gray-400 uppercase tracking-[0.3em] mb-3">Treinamento</div>
+          <div className="text-4xl font-black text-gray-900 tracking-tighter">
+            {stats ? stats.trainingDone : '—'}
+            <span className="text-base font-bold text-gray-300">/{stats?.trainingTotal || 0}</span>
+          </div>
+          <div className="text-[10px] font-bold text-gray-400 mt-2">aulas concluídas</div>
+        </button>
+
+        <button
+          onClick={() => onNavigate?.('clientes')}
+          className="text-left bg-white border border-gray-100 rounded-[28px] p-7 hover:border-gray-200 hover:shadow-md transition-all"
+        >
+          <div className="text-[8px] font-black text-gray-400 uppercase tracking-[0.3em] mb-3">Clientes</div>
+          <div className="text-4xl font-black text-gray-900 tracking-tighter">
+            {stats ? stats.clientsTotal : '—'}
+          </div>
+          <div className="text-[10px] font-bold text-gray-400 mt-2">
+            {stats?.clientsAtRisk ? <span className="text-rose-500">{stats.clientsAtRisk} em risco</span> : 'ativos na carteira'}
+          </div>
+        </button>
+
+        <button
+          onClick={() => onNavigate?.('pdf_builder')}
+          className="text-left bg-white border border-gray-100 rounded-[28px] p-7 hover:border-gray-200 hover:shadow-md transition-all"
+        >
+          <div className="text-[8px] font-black text-gray-400 uppercase tracking-[0.3em] mb-3">Propostas no mês</div>
+          <div className="text-4xl font-black text-gray-900 tracking-tighter">
+            {stats ? stats.proposalsMonth : '—'}
+          </div>
+          <div className="text-[10px] font-bold text-gray-400 mt-2">
+            {stats ? fmtBRL(stats.proposalsValue) + ' em pipeline' : '—'}
+          </div>
+        </button>
+
+        <button
+          onClick={() => onNavigate?.('cadastro_geral')}
+          className="text-left bg-white border border-gray-100 rounded-[28px] p-7 hover:border-gray-200 hover:shadow-md transition-all"
+        >
+          <div className="text-[8px] font-black text-gray-400 uppercase tracking-[0.3em] mb-3">CRM · Leads</div>
+          <div className="text-4xl font-black text-gray-900 tracking-tighter">
+            {stats ? stats.leadsTotal : '—'}
+          </div>
+          <div className="text-[10px] font-bold text-gray-400 mt-2">
+            {stats?.leadsHot ? <span className="text-emerald-600">{stats.leadsHot} quentes</span> : 'na base'}
+          </div>
+        </button>
+      </div>
+
+      {/* DICA DO DIA */}
+      <div className="mb-10 bg-amber-50 border border-amber-200 rounded-[28px] p-7 flex items-start gap-5">
+        <div className="text-3xl shrink-0">💡</div>
+        <div>
+          <div className="text-[9px] font-black text-amber-700 uppercase tracking-[0.3em] mb-1">Dica do dia</div>
+          <p className="text-sm font-bold text-amber-900 leading-relaxed">{tip}</p>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-10">

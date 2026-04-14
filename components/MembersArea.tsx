@@ -20,10 +20,24 @@ interface Track {
   title: string;
   subtitle: string;
   cover: string;
+  coverImage?: string;
   roles: UserRole[];
   areasAllowed: Area[];
   lessons: Lesson[];
 }
+
+const ytThumb = (id: string) => `https://i.ytimg.com/vi/${id}/hqdefault.jpg`;
+
+const lessonThumb = (l: Lesson): string | null => {
+  if (l.youtubeId) return ytThumb(l.youtubeId);
+  return null;
+};
+
+const trackThumb = (t: Track): string | null => {
+  if (t.coverImage) return t.coverImage;
+  const firstWithId = t.lessons.find(l => l.youtubeId);
+  return firstWithId ? ytThumb(firstWithId.youtubeId) : null;
+};
 
 const AREAS: { id: Area; label: string; icon: string; color: string }[] = [
   { id: 'onboarding', label: 'Onboarding', icon: '🚀', color: 'bg-black' },
@@ -40,6 +54,7 @@ const TRACKS: Track[] = [
     title: 'Onboarding Phant',
     subtitle: 'Primeiros passos: Growth, Lives e Branding na prática.',
     cover: '🚀',
+    coverImage: 'https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&w=1600&q=80',
     roles: ['MASTER', 'USER'],
     areasAllowed: ['onboarding', 'growth', 'lives', 'branding'],
     lessons: [
@@ -60,6 +75,7 @@ const TRACKS: Track[] = [
     title: 'Marketing Científico',
     subtitle: 'Operação Cientista do Marketing + Processos Internos. Cultura científica, performance e homologação operacional.',
     cover: '🧪',
+    coverImage: 'https://images.unsplash.com/photo-1559526324-4b87b5e36e44?auto=format&fit=crop&w=1600&q=80',
     roles: ['MASTER', 'USER'],
     areasAllowed: ['marketing', 'onboarding', 'growth'],
     lessons: [
@@ -301,55 +317,99 @@ const MembersArea: React.FC<Props> = ({ currentRole, userProfile }) => {
     );
   }
 
-  // ============ TRACK DETAIL ============
+  // ============ TRACK DETAIL (Netflix-style) ============
   if (activeTrack) {
     const p = trackStats(activeTrack);
-    return (
-      <div className="max-w-[1000px] mx-auto pb-20">
-        <button
-          onClick={() => setActiveTrack(null)}
-          className="mb-8 text-[10px] font-black text-gray-400 uppercase tracking-widest hover:text-brand"
-        >
-          ← Voltar
-        </button>
+    const banner = trackThumb(activeTrack);
+    const area = AREAS.find(a => a.id === activeTrack.area);
+    const firstUndone = activeTrack.lessons.find(l => !myRow(activeTrack.id, l.id)?.completed) || activeTrack.lessons[0];
 
-        <div className="mb-10">
-          <div className="text-[9px] font-black text-gray-400 uppercase tracking-[0.3em] mb-2">
-            {AREAS.find(a => a.id === activeTrack.area)?.label}
-          </div>
-          <h1 className="text-4xl font-black text-gray-900 tracking-tighter mb-3">{activeTrack.title}</h1>
-          <p className="text-sm font-bold text-gray-500 leading-relaxed mb-6">{activeTrack.subtitle}</p>
-          <div className="flex items-center gap-4 max-w-md">
-            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-              <div className="h-full bg-brand transition-all" style={{ width: `${p.pct}%` }} />
+    return (
+      <div className="-mt-8 -mx-8 md:-mt-16 md:-mx-16 pb-20">
+        {/* HERO BANNER */}
+        <div className="relative h-[420px] w-full overflow-hidden">
+          {banner ? (
+            <img src={banner} alt={activeTrack.title} className="absolute inset-0 w-full h-full object-cover" />
+          ) : (
+            <div className={`absolute inset-0 ${area?.color}`} />
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-white via-white/80 to-transparent" />
+          <div className="absolute inset-0 bg-gradient-to-r from-white/90 via-white/40 to-transparent" />
+
+          <div className="relative h-full max-w-[1400px] mx-auto px-8 md:px-16 flex flex-col justify-end pb-12">
+            <button
+              onClick={() => setActiveTrack(null)}
+              className="self-start mb-6 text-[10px] font-black text-gray-700 uppercase tracking-widest hover:text-brand bg-white/80 backdrop-blur px-4 py-2 rounded-full"
+            >
+              ← Voltar
+            </button>
+            <div className="text-[9px] font-black text-gray-700 uppercase tracking-[0.3em] mb-3">
+              {area?.icon} {area?.label} • {activeTrack.lessons.length} aulas
             </div>
-            <span className="text-[9px] font-black text-gray-900 uppercase tracking-widest">{p.done}/{p.total} • {p.pct}%</span>
+            <h1 className="text-5xl md:text-6xl font-black text-gray-900 tracking-tighter mb-4 max-w-3xl leading-[0.95]">
+              {activeTrack.title}
+            </h1>
+            <p className="text-base font-bold text-gray-700 leading-relaxed max-w-2xl mb-6">{activeTrack.subtitle}</p>
+            <div className="flex flex-wrap items-center gap-4">
+              <button
+                onClick={() => setActiveLesson(firstUndone)}
+                className="px-8 py-4 rounded-full bg-black text-white text-[10px] font-black uppercase tracking-widest hover:bg-gray-800 shadow-xl flex items-center gap-3"
+              >
+                ▶ {p.done > 0 ? 'Continuar' : 'Começar'}
+              </button>
+              <div className="flex items-center gap-3 max-w-xs">
+                <div className="w-32 h-1.5 bg-gray-300 rounded-full overflow-hidden">
+                  <div className="h-full bg-brand transition-all" style={{ width: `${p.pct}%` }} />
+                </div>
+                <span className="text-[9px] font-black text-gray-700 uppercase tracking-widest">{p.done}/{p.total} • {p.pct}%</span>
+              </div>
+            </div>
           </div>
         </div>
 
-        <div className="space-y-2">
-          {activeTrack.lessons.map((l, i) => {
-            const row = myRow(activeTrack.id, l.id);
-            const likes = lessonLikes(activeTrack.id, l.id);
-            return (
-              <button
-                key={l.id}
-                onClick={() => setActiveLesson(l)}
-                className={`w-full text-left bg-white rounded-[24px] p-5 border transition-all flex items-center gap-5 ${row?.completed ? 'border-brand/30' : 'border-gray-100 hover:border-gray-200'}`}
-              >
-                <div className={`w-9 h-9 rounded-full border-2 flex items-center justify-center shrink-0 text-[10px] font-black ${row?.completed ? 'bg-brand border-brand text-white' : 'border-gray-200 text-gray-400'}`}>
-                  {row?.completed ? '✓' : i + 1}
-                </div>
-                <div className="flex-1 min-w-0">
-                  <h3 className="text-sm font-black text-gray-900 tracking-tight truncate">{l.title}</h3>
-                  <div className="text-[9px] font-black text-gray-400 uppercase tracking-[0.2em] mt-1">{l.duration}</div>
-                </div>
-                <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest shrink-0">
-                  {row?.liked ? '♥' : '♡'} {likes}
-                </div>
-              </button>
-            );
-          })}
+        {/* LESSONS */}
+        <div className="max-w-[1400px] mx-auto px-8 md:px-16 mt-12">
+          <div className="text-[9px] font-black text-gray-400 uppercase tracking-[0.4em] mb-5">Episódios</div>
+          <div className="space-y-3">
+            {activeTrack.lessons.map((l, i) => {
+              const row = myRow(activeTrack.id, l.id);
+              const likes = lessonLikes(activeTrack.id, l.id);
+              const thumb = lessonThumb(l);
+              return (
+                <button
+                  key={l.id}
+                  onClick={() => setActiveLesson(l)}
+                  className={`w-full text-left bg-white rounded-[24px] border transition-all flex items-center gap-5 p-3 pr-6 group ${row?.completed ? 'border-brand/30' : 'border-gray-100 hover:border-gray-300 hover:shadow-md'}`}
+                >
+                  <div className="relative w-44 aspect-video rounded-[16px] overflow-hidden bg-gray-100 shrink-0">
+                    {thumb ? (
+                      <img src={thumb} alt={l.title} className="w-full h-full object-cover" />
+                    ) : (
+                      <div className={`w-full h-full ${area?.color} flex items-center justify-center text-3xl text-white`}>
+                        {activeTrack.cover}
+                      </div>
+                    )}
+                    <div className="absolute inset-0 bg-black/0 group-hover:bg-black/30 transition-all flex items-center justify-center">
+                      <div className="w-10 h-10 rounded-full bg-white/90 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-all">
+                        <span className="text-black text-xs ml-0.5">▶</span>
+                      </div>
+                    </div>
+                    {row?.completed && (
+                      <div className="absolute top-2 right-2 w-6 h-6 rounded-full bg-brand text-white flex items-center justify-center text-[10px] font-black">✓</div>
+                    )}
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="text-[8px] font-black text-gray-400 uppercase tracking-[0.3em] mb-1">Episódio {i + 1} · {l.duration}</div>
+                    <h3 className="text-base font-black text-gray-900 tracking-tight mb-1 truncate">{l.title}</h3>
+                    <p className="text-xs font-bold text-gray-500 leading-relaxed line-clamp-2">{l.description}</p>
+                  </div>
+                  <div className="text-[9px] font-black text-gray-400 uppercase tracking-widest shrink-0 hidden md:block">
+                    {row?.liked ? '♥' : '♡'} {likes}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
         </div>
       </div>
     );
@@ -415,80 +475,157 @@ const MembersArea: React.FC<Props> = ({ currentRole, userProfile }) => {
     );
   }
 
-  // ============ TRACKS LIST ============
-  return (
-    <div className="max-w-[1400px] mx-auto pb-20">
-      <div className="mb-10 flex items-end justify-between gap-6 flex-wrap">
-        <div>
-          <div className="text-[9px] font-black text-gray-400 uppercase tracking-[0.4em] mb-2">Fundamentos</div>
-          <h1 className="text-5xl font-black text-gray-900 tracking-tighter mb-3">Treinamento</h1>
-          <p className="text-sm font-bold text-gray-500 leading-relaxed max-w-2xl">
-            Trilhas por área da empresa. Seu acesso é liberado conforme seu perfil.
-          </p>
+  // ============ TRACKS LIST (Netflix-style) ============
+  const featured = visibleTracks
+    .map(t => ({ t, p: trackStats(t) }))
+    .sort((a, b) => b.p.pct - a.p.pct)[0]?.t || visibleTracks[0];
+
+  const tracksByArea: { area: typeof AREAS[number]; items: Track[] }[] = AREAS
+    .map(a => ({ area: a, items: visibleTracks.filter(t => t.area === a.id) }))
+    .filter(g => g.items.length > 0);
+
+  const renderCard = (t: Track) => {
+    const p = trackStats(t);
+    const area = AREAS.find(a => a.id === t.area);
+    const thumb = trackThumb(t);
+    return (
+      <button
+        key={t.id}
+        onClick={() => setActiveTrack(t)}
+        className="group shrink-0 w-72 text-left rounded-[20px] overflow-hidden bg-gray-100 relative transition-all hover:scale-[1.04] hover:z-10 hover:shadow-2xl"
+      >
+        <div className="relative aspect-video bg-gray-200">
+          {thumb ? (
+            <img src={thumb} alt={t.title} className="w-full h-full object-cover" />
+          ) : (
+            <div className={`w-full h-full ${area?.color} flex items-center justify-center text-5xl text-white`}>
+              {t.cover}
+            </div>
+          )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent" />
+          <div className="absolute top-3 left-3 text-[8px] font-black text-white uppercase tracking-[0.3em] bg-black/60 backdrop-blur px-2.5 py-1 rounded-full">
+            {area?.icon} {area?.label}
+          </div>
+          {p.pct === 100 && (
+            <div className="absolute top-3 right-3 text-[8px] font-black text-white uppercase tracking-widest bg-brand px-2.5 py-1 rounded-full">✓ Concluído</div>
+          )}
+          <div className="absolute bottom-0 inset-x-0 p-4">
+            <h3 className="text-base font-black text-white tracking-tight leading-tight mb-1 line-clamp-2">{t.title}</h3>
+            <div className="text-[9px] font-black text-white/70 uppercase tracking-widest">{t.lessons.length} episódios</div>
+          </div>
         </div>
-        {currentRole === 'MASTER' && (
-          <button
-            onClick={() => setView('performance')}
-            className="px-6 py-3 rounded-full text-[10px] font-black uppercase tracking-widest bg-black text-white hover:bg-gray-800"
-          >
-            Desempenho do time
-          </button>
+        {p.pct > 0 && (
+          <div className="h-1 bg-gray-300">
+            <div className="h-full bg-brand transition-all" style={{ width: `${p.pct}%` }} />
+          </div>
         )}
+      </button>
+    );
+  };
+
+  return (
+    <div className="-mt-8 -mx-8 md:-mt-16 md:-mx-16 pb-20">
+      {/* HERO FEATURED */}
+      {featured && (() => {
+        const banner = trackThumb(featured);
+        const area = AREAS.find(a => a.id === featured.area);
+        const p = trackStats(featured);
+        return (
+          <div className="relative h-[480px] w-full overflow-hidden">
+            {banner ? (
+              <img src={banner} alt={featured.title} className="absolute inset-0 w-full h-full object-cover" />
+            ) : (
+              <div className={`absolute inset-0 ${area?.color}`} />
+            )}
+            <div className="absolute inset-0 bg-gradient-to-t from-white via-white/85 to-transparent" />
+            <div className="absolute inset-0 bg-gradient-to-r from-white/95 via-white/40 to-transparent" />
+
+            <div className="relative h-full max-w-[1400px] mx-auto px-8 md:px-16 flex flex-col justify-center">
+              <div className="text-[9px] font-black text-gray-500 uppercase tracking-[0.4em] mb-3">
+                Fundamentos · Treinamento · Em destaque
+              </div>
+              <h1 className="text-5xl md:text-7xl font-black text-gray-900 tracking-tighter mb-4 max-w-3xl leading-[0.92]">
+                {featured.title}
+              </h1>
+              <p className="text-base font-bold text-gray-700 leading-relaxed max-w-xl mb-8">{featured.subtitle}</p>
+              <div className="flex flex-wrap items-center gap-4">
+                <button
+                  onClick={() => setActiveTrack(featured)}
+                  className="px-8 py-4 rounded-full bg-black text-white text-[10px] font-black uppercase tracking-widest hover:bg-gray-800 shadow-2xl flex items-center gap-3"
+                >
+                  ▶ {p.done > 0 ? 'Continuar assistindo' : 'Assistir agora'}
+                </button>
+                <button
+                  onClick={() => setActiveTrack(featured)}
+                  className="px-8 py-4 rounded-full bg-white/90 backdrop-blur border border-gray-200 text-gray-900 text-[10px] font-black uppercase tracking-widest hover:bg-white"
+                >
+                  Mais informações
+                </button>
+                {currentRole === 'MASTER' && (
+                  <button
+                    onClick={() => setView('performance')}
+                    className="ml-auto px-6 py-3 rounded-full text-[10px] font-black uppercase tracking-widest bg-white/80 backdrop-blur border border-gray-200 text-gray-700 hover:bg-white"
+                  >
+                    Desempenho do time
+                  </button>
+                )}
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
+      {/* AREA FILTERS */}
+      <div className="max-w-[1400px] mx-auto px-8 md:px-16 mt-12 mb-8">
+        <div className="flex flex-wrap gap-2">
+          {currentRole === 'MASTER' && (
+            <button
+              onClick={() => setSelectedArea('all')}
+              className={`px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${selectedArea === 'all' ? 'bg-black text-white' : 'bg-white border border-gray-200 text-gray-500 hover:border-gray-300'}`}
+            >
+              Todas
+            </button>
+          )}
+          {AREAS.map(a => (
+            <button
+              key={a.id}
+              onClick={() => setSelectedArea(a.id)}
+              className={`px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${selectedArea === a.id ? 'bg-black text-white' : 'bg-white border border-gray-200 text-gray-500 hover:border-gray-300'}`}
+            >
+              <span>{a.icon}</span> {a.label}
+            </button>
+          ))}
+        </div>
       </div>
 
-      <div className="flex flex-wrap gap-3 mb-10">
-        {currentRole === 'MASTER' && (
-          <button
-            onClick={() => setSelectedArea('all')}
-            className={`px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all ${selectedArea === 'all' ? 'bg-black text-white' : 'bg-white border border-gray-200 text-gray-500 hover:border-gray-300'}`}
-          >
-            Todas
-          </button>
-        )}
-        {AREAS.map(a => (
-          <button
-            key={a.id}
-            onClick={() => setSelectedArea(a.id)}
-            className={`px-5 py-2.5 rounded-full text-[10px] font-black uppercase tracking-widest transition-all flex items-center gap-2 ${selectedArea === a.id ? 'bg-black text-white' : 'bg-white border border-gray-200 text-gray-500 hover:border-gray-300'}`}
-          >
-            <span>{a.icon}</span> {a.label}
-          </button>
-        ))}
-      </div>
-
+      {/* ROWS BY AREA */}
       {visibleTracks.length === 0 ? (
-        <div className="bg-white rounded-[32px] p-16 text-center border border-gray-100">
-          <div className="text-4xl mb-3">🔒</div>
-          <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Sem trilhas nesta área ainda.</p>
+        <div className="max-w-[1400px] mx-auto px-8 md:px-16">
+          <div className="bg-white rounded-[32px] p-16 text-center border border-gray-100">
+            <div className="text-4xl mb-3">🔒</div>
+            <p className="text-[10px] font-black text-gray-400 uppercase tracking-widest">Sem trilhas nesta área ainda.</p>
+          </div>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {visibleTracks.map(t => {
-            const p = trackStats(t);
-            const area = AREAS.find(a => a.id === t.area);
-            return (
-              <button
-                key={t.id}
-                onClick={() => setActiveTrack(t)}
-                className="group text-left bg-white rounded-[32px] p-8 border border-gray-100 hover:border-gray-200 hover:shadow-lg transition-all"
-              >
-                <div className={`w-14 h-14 rounded-[18px] ${area?.color} text-white flex items-center justify-center text-2xl mb-6`}>
-                  {t.cover}
+        <div className="space-y-12">
+          {tracksByArea.map(g => (
+            <div key={g.area.id}>
+              <div className="max-w-[1400px] mx-auto px-8 md:px-16 mb-4 flex items-baseline gap-3">
+                <h2 className="text-2xl font-black text-gray-900 tracking-tighter">
+                  <span className="mr-2">{g.area.icon}</span>{g.area.label}
+                </h2>
+                <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">
+                  {g.items.length} {g.items.length === 1 ? 'trilha' : 'trilhas'}
+                </span>
+              </div>
+              <div className="px-8 md:px-16 max-w-[1400px] mx-auto">
+                <div className="flex gap-4 overflow-x-auto pb-6 -mx-2 px-2 snap-x scroll-smooth"
+                     style={{ scrollbarWidth: 'thin' }}>
+                  {g.items.map(renderCard)}
                 </div>
-                <div className="text-[8px] font-black text-gray-400 uppercase tracking-[0.3em] mb-2">
-                  {area?.label} • {t.lessons.length} aulas
-                </div>
-                <h3 className="text-lg font-black text-gray-900 tracking-tight mb-2 leading-tight">{t.title}</h3>
-                <p className="text-xs font-bold text-gray-500 leading-relaxed mb-6 line-clamp-2">{t.subtitle}</p>
-                <div className="flex items-center gap-3">
-                  <div className="flex-1 h-1 bg-gray-100 rounded-full overflow-hidden">
-                    <div className="h-full bg-brand transition-all" style={{ width: `${p.pct}%` }} />
-                  </div>
-                  <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{p.pct}%</span>
-                </div>
-              </button>
-            );
-          })}
+              </div>
+            </div>
+          ))}
         </div>
       )}
     </div>
