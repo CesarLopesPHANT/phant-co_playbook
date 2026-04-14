@@ -62,6 +62,18 @@ export const PLAYBOOK_STRUCTURE: PlaybookModule[] = [
     permissions: ['MASTER', 'USER']
   },
   {
+    id: 'treinamento',
+    category: 'BASE',
+    title: 'Treinamento',
+    description: 'Trilhas de aprendizado por área da empresa com acesso por perfil.',
+    status: 'ATIVA',
+    version: '1.0',
+    source: 'Manual',
+    type: 'learning_path',
+    icon: 'scripts',
+    permissions: ['MASTER', 'USER']
+  },
+  {
     id: 'sla_metas',
     category: 'BASE',
     title: 'SLA e Metas',

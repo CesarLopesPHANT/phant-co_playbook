@@ -15,15 +15,17 @@ import TermsOfService from './TermsOfService';
 import CopilotModule from './Assist/CopilotModule';
 import ClientManagement from './ClientManagement';
 import CadastroGeral from './CadastroGeral';
+import MembersArea from './MembersArea';
 
 interface PlaybookEditorProps {
   module: PlaybookModule;
   currentRole: UserRole;
   onNavigateToModule?: (id: string) => void;
   appConfig: AppCustomization;
+  userProfile?: any;
 }
 
-const PlaybookEditor: React.FC<PlaybookEditorProps> = ({ module, currentRole, onNavigateToModule, appConfig }) => {
+const PlaybookEditor: React.FC<PlaybookEditorProps> = ({ module, currentRole, onNavigateToModule, appConfig, userProfile }) => {
   const [selectedSolution, setSelectedSolution] = useState<SolutionItem | null>(null);
   const [catalogData, setCatalogData] = useState<SolutionItem[]>([]);
   const [addingToProposal, setAddingToProposal] = useState<string | number | null>(null);
@@ -131,6 +133,7 @@ const PlaybookEditor: React.FC<PlaybookEditorProps> = ({ module, currentRole, on
   if (module.type === 'fichario') return <Fichario currentRole={currentRole} />;
   if (module.type === 'calculator') return <ProposalSimulator onNavigateToBuilder={() => onNavigateToModule?.('pdf_builder')} />;
   if (module.type === 'cadastro_geral') return <CadastroGeral />;
+  if (module.type === 'learning_path') return <MembersArea currentRole={currentRole} userProfile={userProfile} />;
   
   // PÁGINAS ESTÁTICAS
   if (module.id === 'cultura') return <NossaEssencia currentRole={currentRole} />;

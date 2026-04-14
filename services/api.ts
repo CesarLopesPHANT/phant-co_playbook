@@ -637,6 +637,37 @@ export const SupabaseService = {
       if (error) throw error;
       return { success: true };
     } catch (err: any) { return { success: false, message: err.message }; }
+  },
+
+  // ====== TREINAMENTO ======
+  async fetchTrainingProgress(userId?: string) {
+    try {
+      let q = supabase.from('training_progress').select('*');
+      if (userId) q = q.eq('user_id', userId);
+      const { data, error } = await q;
+      if (error) { console.warn('fetchTrainingProgress:', error.message); return []; }
+      return data || [];
+    } catch (err) { return []; }
+  },
+
+  async upsertTrainingProgress(row: { user_id: string; user_name: string; track_id: string; lesson_id: string; completed?: boolean; liked?: boolean; }) {
+    try {
+      const payload: any = {
+        user_id: row.user_id,
+        user_name: row.user_name,
+        track_id: row.track_id,
+        lesson_id: row.lesson_id,
+        updated_at: new Date().toISOString(),
+      };
+      if (typeof row.completed === 'boolean') {
+        payload.completed = row.completed;
+        payload.completed_at = row.completed ? new Date().toISOString() : null;
+      }
+      if (typeof row.liked === 'boolean') payload.liked = row.liked;
+      const { error } = await supabase.from('training_progress').upsert(payload, { onConflict: 'user_id,track_id,lesson_id' });
+      if (error) throw error;
+      return { success: true };
+    } catch (err: any) { return { success: false, message: err.message }; }
   }
 };
 

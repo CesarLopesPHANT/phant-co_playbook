@@ -319,7 +319,7 @@ FOR EACH ROW EXECUTE FUNCTION public.handle_new_user();
       />
       <main className="flex-1 overflow-y-auto relative custom-scrollbar">
         <div className="p-8 md:p-16 max-w-[1600px] mx-auto">
-          {selectedModule && <PlaybookEditor module={selectedModule} currentRole={currentRole} appConfig={appConfig} />}
+          {selectedModule && <PlaybookEditor module={selectedModule} currentRole={currentRole} appConfig={appConfig} userProfile={userProfile} />}
         </div>
       </main>
       <AIAssistant currentRole={currentRole} />
