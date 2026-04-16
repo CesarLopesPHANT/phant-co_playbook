@@ -62,6 +62,8 @@ function mapHeaders(headers: string[]): (keyof CadastroRecord | null)[] {
   });
 }
 
+const PAGE_SIZES = [25, 50, 100, 0]; // 0 = Todos
+
 const CadastroGeral: React.FC = () => {
   const [records, setRecords] = useState<CadastroWithStats[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -69,6 +71,7 @@ const CadastroGeral: React.FC = () => {
   const [filterStatus, setFilterStatus] = useState<string>('Todos');
   const [filterSegmento, setFilterSegmento] = useState<string>('Todos');
   const [filterOrigem, setFilterOrigem] = useState<string>('Todos');
+  const [filterEmpresa, setFilterEmpresa] = useState<string>('Todos');
   const [sortField, setSortField] = useState<'nome' | 'created_at' | 'empresa' | 'valor_total'>('created_at');
   const [sortAsc, setSortAsc] = useState(false);
   const [editingRecord, setEditingRecord] = useState<Partial<CadastroRecord> | null>(null);
@@ -79,6 +82,8 @@ const CadastroGeral: React.FC = () => {
   const [detailRecord, setDetailRecord] = useState<CadastroWithStats | null>(null);
   const [detailProposals, setDetailProposals] = useState<ProposalRecord[]>([]);
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(25);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
@@ -118,11 +123,17 @@ const CadastroGeral: React.FC = () => {
     return ['Todos', ...Array.from(set).sort()];
   }, [records]);
 
+  const empresas = useMemo(() => {
+    const set = new Set(records.map(r => r.empresa).filter(Boolean));
+    return ['Todos', ...Array.from(set).sort()];
+  }, [records]);
+
   const filteredRecords = useMemo(() => {
     let result = [...records];
     if (filterStatus !== 'Todos') result = result.filter(r => r.status === filterStatus);
     if (filterSegmento !== 'Todos') result = result.filter(r => r.segmento === filterSegmento);
     if (filterOrigem !== 'Todos') result = result.filter(r => r.origem === filterOrigem);
+    if (filterEmpresa !== 'Todos') result = result.filter(r => r.empresa === filterEmpresa);
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
       result = result.filter(r => r.nome?.toLowerCase().includes(term) || r.email?.toLowerCase().includes(term) || r.empresa?.toLowerCase().includes(term) || r.telefone?.includes(term));
@@ -134,7 +145,18 @@ const CadastroGeral: React.FC = () => {
       return sortAsc ? valA.localeCompare(valB) : valB.localeCompare(valA);
     });
     return result;
-  }, [records, filterStatus, filterSegmento, filterOrigem, searchTerm, sortField, sortAsc]);
+  }, [records, filterStatus, filterSegmento, filterOrigem, filterEmpresa, searchTerm, sortField, sortAsc]);
+
+  // Pagination
+  const totalPages = pageSize === 0 ? 1 : Math.ceil(filteredRecords.length / pageSize);
+  const paginatedRecords = useMemo(() => {
+    if (pageSize === 0) return filteredRecords;
+    const start = (currentPage - 1) * pageSize;
+    return filteredRecords.slice(start, start + pageSize);
+  }, [filteredRecords, currentPage, pageSize]);
+
+  // Reset page when filters change
+  useEffect(() => { setCurrentPage(1); }, [filterStatus, filterSegmento, filterOrigem, filterEmpresa, searchTerm, pageSize]);
 
   // =================== HANDLERS ===================
 
@@ -192,7 +214,8 @@ const CadastroGeral: React.FC = () => {
 
   const openDetail = async (record: CadastroWithStats) => {
     setDetailRecord(record);
-    if (record.id && record.total_propostas > 0) {
+    const isFromClients = record.id?.startsWith('client_');
+    if (record.id && record.total_propostas > 0 && !isFromClients) {
       setIsLoadingDetail(true);
       const proposals = await SupabaseService.fetchProposalsByCadastro(record.id);
       setDetailProposals(proposals);
@@ -205,7 +228,7 @@ const CadastroGeral: React.FC = () => {
     else { setSortField(field); setSortAsc(true); }
   };
 
-  const activeFilters = [filterStatus, filterSegmento, filterOrigem].filter(f => f !== 'Todos').length;
+  const activeFilters = [filterStatus, filterSegmento, filterOrigem, filterEmpresa].filter(f => f !== 'Todos').length;
 
   const getProposalStatusBadge = (status?: string) => {
     if (status === 'APPROVED') return <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[8px] font-black uppercase rounded">Aprovada</span>;
@@ -288,9 +311,17 @@ const CadastroGeral: React.FC = () => {
               </select>
             </div>
           )}
+          {empresas.length > 1 && (
+            <div className="space-y-2">
+              <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Empresa</span>
+              <select value={filterEmpresa} onChange={(e) => setFilterEmpresa(e.target.value)} className="px-5 py-2.5 rounded-xl text-[11px] font-bold bg-white border border-gray-100 text-gray-600 focus:outline-none focus:ring-2 focus:ring-black/10 cursor-pointer">
+                {empresas.map(e => <option key={e} value={e}>{e}</option>)}
+              </select>
+            </div>
+          )}
           {activeFilters > 0 && (
             <div className="flex items-end">
-              <button onClick={() => { setFilterStatus('Todos'); setFilterSegmento('Todos'); setFilterOrigem('Todos'); }} className="px-4 py-2.5 text-[10px] font-black text-red-400 hover:text-red-600 uppercase tracking-widest transition-colors">Limpar filtros ({activeFilters})</button>
+              <button onClick={() => { setFilterStatus('Todos'); setFilterSegmento('Todos'); setFilterOrigem('Todos'); setFilterEmpresa('Todos'); }} className="px-4 py-2.5 text-[10px] font-black text-red-400 hover:text-red-600 uppercase tracking-widest transition-colors">Limpar filtros ({activeFilters})</button>
             </div>
           )}
         </div>
@@ -339,7 +370,7 @@ const CadastroGeral: React.FC = () => {
                 </tr>
               </thead>
               <tbody>
-                {filteredRecords.map(record => (
+                {paginatedRecords.map(record => (
                   <tr key={record.id} onClick={() => openDetail(record)} className="border-b border-gray-50/50 hover:bg-gray-50/50 transition-colors group cursor-pointer">
                     <td className="px-5 py-4">
                       <span className="text-sm font-black text-gray-900">{record.nome}</span>
@@ -362,22 +393,81 @@ const CadastroGeral: React.FC = () => {
                     </td>
                     <td className="px-5 py-4 text-[11px] font-bold text-gray-300">{record.created_at ? new Date(record.created_at).toLocaleDateString('pt-BR') : '---'}</td>
                     <td className="px-5 py-4">
-                      <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button onClick={(e) => { e.stopPropagation(); setEditingRecord({ ...record }); }} className="p-2 rounded-xl hover:bg-gray-100 transition-colors text-gray-400 hover:text-black" title="Editar">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
-                        </button>
-                        <button onClick={(e) => { e.stopPropagation(); record.id && handleDelete(record.id); }} className="p-2 rounded-xl hover:bg-red-50 transition-colors text-gray-400 hover:text-red-500" title="Excluir">
-                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
-                        </button>
-                      </div>
+                      {record.id?.startsWith('client_') ? (
+                        <span className="text-[8px] font-black text-purple-500 bg-purple-50 px-2 py-1 rounded-lg uppercase tracking-widest">Gestão</span>
+                      ) : (
+                        <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button onClick={(e) => { e.stopPropagation(); setEditingRecord({ ...record }); }} className="p-2 rounded-xl hover:bg-gray-100 transition-colors text-gray-400 hover:text-black" title="Editar">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" /><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" /></svg>
+                          </button>
+                          <button onClick={(e) => { e.stopPropagation(); record.id && handleDelete(record.id); }} className="p-2 rounded-xl hover:bg-red-50 transition-colors text-gray-400 hover:text-red-500" title="Excluir">
+                            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" /></svg>
+                          </button>
+                        </div>
+                      )}
                     </td>
                   </tr>
                 ))}
               </tbody>
             </table>
           </div>
-          <div className="px-6 py-4 border-t border-gray-50 flex items-center justify-between">
-            <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest">{filteredRecords.length} de {records.length} registros</span>
+          <div className="px-6 py-4 border-t border-gray-50 flex flex-wrap items-center justify-between gap-4">
+            <div className="flex items-center gap-4">
+              <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest">{filteredRecords.length} de {records.length} registros</span>
+              <div className="flex items-center gap-2">
+                <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Exibir:</span>
+                {PAGE_SIZES.map(size => (
+                  <button
+                    key={size}
+                    onClick={() => setPageSize(size)}
+                    className={`px-3 py-1 rounded-lg text-[10px] font-black uppercase tracking-widest transition-all ${pageSize === size ? 'bg-black text-white' : 'bg-gray-50 text-gray-400 hover:text-black hover:bg-gray-100'}`}
+                  >
+                    {size === 0 ? 'Todos' : size}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {totalPages > 1 && (
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1}
+                  className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest bg-white border border-gray-100 text-gray-500 hover:border-gray-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                >
+                  ← Anterior
+                </button>
+                {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
+                  let page: number;
+                  if (totalPages <= 7) {
+                    page = i + 1;
+                  } else if (currentPage <= 4) {
+                    page = i + 1;
+                  } else if (currentPage >= totalPages - 3) {
+                    page = totalPages - 6 + i;
+                  } else {
+                    page = currentPage - 3 + i;
+                  }
+                  return (
+                    <button
+                      key={page}
+                      onClick={() => setCurrentPage(page)}
+                      className={`w-8 h-8 rounded-lg text-[10px] font-black transition-all ${currentPage === page ? 'bg-black text-white shadow-lg' : 'bg-white border border-gray-100 text-gray-400 hover:text-black hover:border-gray-300'}`}
+                    >
+                      {page}
+                    </button>
+                  );
+                })}
+                <button
+                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages}
+                  className="px-3 py-1.5 rounded-lg text-[10px] font-black uppercase tracking-widest bg-white border border-gray-100 text-gray-500 hover:border-gray-300 disabled:opacity-30 disabled:cursor-not-allowed transition-all"
+                >
+                  Próxima →
+                </button>
+              </div>
+            )}
+
             <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest">Pipeline: {formatCurrencyShort(kpis.valorTotal)} | Aprovado: {formatCurrencyShort(kpis.valorAprovado)}</span>
           </div>
         </div>
@@ -457,7 +547,11 @@ const CadastroGeral: React.FC = () => {
             </div>
 
             <div className="flex justify-end gap-3 mt-8 pt-6 border-t border-gray-100">
-              <button onClick={() => { setDetailRecord(null); setEditingRecord({ ...detailRecord }); }} className="px-6 py-3 rounded-2xl bg-gray-50 text-gray-500 font-black text-[10px] uppercase tracking-widest hover:bg-gray-100 transition-all">Editar</button>
+              {detailRecord.id?.startsWith('client_') ? (
+                <span className="px-6 py-3 text-[9px] font-black text-purple-500 uppercase tracking-widest">Origem: Gestão de Clientes</span>
+              ) : (
+                <button onClick={() => { setDetailRecord(null); setEditingRecord({ ...detailRecord }); }} className="px-6 py-3 rounded-2xl bg-gray-50 text-gray-500 font-black text-[10px] uppercase tracking-widest hover:bg-gray-100 transition-all">Editar</button>
+              )}
               <button onClick={() => setDetailRecord(null)} className="px-6 py-3 rounded-2xl bg-black text-white font-black text-[10px] uppercase tracking-widest hover:bg-gray-900 transition-all shadow-lg shadow-black/20">Fechar</button>
             </div>
           </div>

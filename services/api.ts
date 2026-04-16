@@ -400,13 +400,15 @@ export const SupabaseService = {
 
   async fetchCadastroWithStats(): Promise<CadastroWithStats[]> {
     try {
-      const [cadastroRes, historyRes] = await Promise.all([
+      const [cadastroRes, historyRes, clientsRes] = await Promise.all([
         supabase.from('cadastro_geral').select('*').order('nome', { ascending: true }),
-        supabase.from('proposals_history').select('cadastro_id, total_value, status, created_at')
+        supabase.from('proposals_history').select('cadastro_id, total_value, status, created_at'),
+        supabase.from('clients').select('id, company_name, industry, location, contact, brands, mrr, fee, status, cnpj, assinatura_descricao, forma_pagamento, created_at, contract_model, health_status').order('company_name', { ascending: true })
       ]);
 
       const cadastros: CadastroRecord[] = cadastroRes.data || [];
       const proposals = historyRes.data || [];
+      const clients = clientsRes.data || [];
 
       const statsMap = new Map<string, { total: number; valor: number; valorAprovado: number; ultima?: string }>();
       proposals.forEach(p => {
@@ -419,7 +421,9 @@ export const SupabaseService = {
         statsMap.set(p.cadastro_id, cur);
       });
 
-      return cadastros.map(c => {
+      // Map cadastro_geral records
+      const cadastroNames = new Set(cadastros.map(c => (c.nome || '').toUpperCase().trim()));
+      const result: CadastroWithStats[] = cadastros.map(c => {
         const stats = statsMap.get(c.id!) || { total: 0, valor: 0, valorAprovado: 0 };
         return {
           ...c,
@@ -429,6 +433,42 @@ export const SupabaseService = {
           ultima_proposta: stats.ultima
         };
       });
+
+      // Merge clients that are NOT already in cadastro_geral (by company_name match)
+      clients.forEach(cl => {
+        const nameUpper = (cl.company_name || '').toUpperCase().trim();
+        if (cadastroNames.has(nameUpper)) return; // skip duplicates
+        const contact = cl.contact || {};
+        const brands = cl.brands || {};
+        const brandTags: string[] = [];
+        if (brands.phant?.active) brandTags.push('Phant');
+        if (brands.leadbox?.active) brandTags.push('LeadBox');
+        if (brands.vivemus?.active) brandTags.push('Vivemus');
+
+        const statusMap: Record<string, CadastroStatus> = { active: 'CLIENTE', churned: 'INATIVO', onboarding: 'ATIVO' };
+
+        result.push({
+          id: `client_${cl.id}`,
+          nome: cl.company_name || '',
+          email: contact.email || '',
+          telefone: contact.phone || '',
+          empresa: cl.company_name || '',
+          cargo: '',
+          segmento: cl.industry || '',
+          origem: brandTags.join(' + ') || 'Gestão de Clientes',
+          status: statusMap[cl.status] || 'CLIENTE',
+          observacoes: cl.assinatura_descricao || '',
+          created_at: cl.created_at,
+          total_propostas: 0,
+          valor_total: cl.mrr || cl.fee || 0,
+          valor_aprovado: cl.mrr || cl.fee || 0,
+          ultima_proposta: undefined,
+          _source: 'clients' as any,
+        });
+      });
+
+      result.sort((a, b) => (a.nome || '').localeCompare(b.nome || ''));
+      return result;
     } catch { return []; }
   },
 
@@ -541,6 +581,11 @@ export const SupabaseService = {
         contract_model: item.contract_model || 'Growth',
         squad_name: item.squad_name || '',
         health_status: item.health_status || item.health || 'care',
+        health: (() => {
+          const hs = item.health_status || item.health || 'care';
+          const map: Record<string, string> = { safe: 'safe', care: 'care', danger: 'danger', churn: 'danger', implementacao: 'care' };
+          return map[hs] || item.health || 'care';
+        })(),
         risk_resultado: item.risk_resultado || '',
         risk_entregas: item.risk_entregas || '',
         risk_relacionamento: item.risk_relacionamento || '',

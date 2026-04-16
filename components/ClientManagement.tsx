@@ -23,6 +23,7 @@ const EMPTY_CLIENT: Omit<ClientRecord, 'id' | 'created_at' | 'updated_at'> = {
   ano_fundacao: '', receita_anual: '', num_funcionarios: '', data_entrada: '', data_onboarding: '',
   contato_trimestre: '', assinatura_date: '', churn_date: '',
   lt: undefined, nps: undefined, ultima_nota: undefined, recomendacao: '', company_logo: '',
+  cnpj: '', assinatura_descricao: '', forma_pagamento: '',
   financial_history: [], upsell_pipeline: [], consciousness_level: 'inconsciente',
   milestones: [], last_report_date: undefined, intervention_plan: '', notes: '', status: 'active'
 };
@@ -494,10 +495,13 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
               <InputField value={editForm.contact?.name || ''} onChange={v => setEditForm({ ...editForm, contact: { ...editForm.contact, name: v } })} placeholder="Ponto de Contato" />
               <InputField value={editForm.contact?.email || ''} onChange={v => setEditForm({ ...editForm, contact: { ...editForm.contact, email: v } })} placeholder="E-mail" />
               <InputField value={editForm.contact?.phone || ''} onChange={v => setEditForm({ ...editForm, contact: { ...editForm.contact, phone: v } })} placeholder="Telefone" />
+              <InputField value={editForm.cnpj || ''} onChange={v => setEditForm({ ...editForm, cnpj: v })} placeholder="CNPJ" label="CNPJ" />
               <InputField type="date" value={editForm.data_entrada || ''} onChange={v => setEditForm({ ...editForm, data_entrada: v })} label="Data de Entrada" />
               <InputField type="date" value={editForm.data_onboarding || ''} onChange={v => setEditForm({ ...editForm, data_onboarding: v })} label="Início Onboarding" />
               <InputField type="date" value={editForm.assinatura_date || ''} onChange={v => setEditForm({ ...editForm, assinatura_date: v })} label="Assinatura" />
+              <InputField value={editForm.forma_pagamento || ''} onChange={v => setEditForm({ ...editForm, forma_pagamento: v })} placeholder="Ex: Boleto, Pix, Cartão..." label="Forma de Pagamento" />
             </div>
+            <InputField value={editForm.assinatura_descricao || ''} onChange={v => setEditForm({ ...editForm, assinatura_descricao: v })} placeholder="Ex: 1 WhatsApp, 1 Instagram, 3 Usuários" label="Descrição da Assinatura" />
           </div>
 
           {/* FINANCEIRO & RISCO */}
@@ -699,10 +703,10 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
       </PageHeader>
 
       <div className="overflow-x-auto rounded-[20px] border border-gray-100 bg-white shadow-sm">
-        <table className="w-full text-left min-w-[1200px]">
+        <table className="w-full text-left min-w-[1400px]">
           <thead>
             <tr className="border-b border-gray-100">
-              <th colSpan={7} className="px-4 py-2 text-[8px] font-black text-indigo-600 uppercase tracking-widest bg-indigo-50/60 rounded-tl-[20px]">Dados Empresa</th>
+              <th colSpan={8} className="px-4 py-2 text-[8px] font-black text-indigo-600 uppercase tracking-widest bg-indigo-50/60 rounded-tl-[20px]">Dados Empresa</th>
               <th colSpan={4} className="px-4 py-2 text-[8px] font-black text-violet-600 uppercase tracking-widest bg-violet-50/60">Dados Internos</th>
               <th colSpan={5} className="px-4 py-2 text-[8px] font-black text-emerald-600 uppercase tracking-widest bg-emerald-50/60 rounded-tr-[20px]">Dados Contrato</th>
             </tr>
@@ -710,6 +714,7 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
               <th className={th}>#</th>
               <th className={th}>Marca</th>
               <th className={`${th} min-w-[180px]`}>Nome</th>
+              <th className={th}>CNPJ</th>
               <th className={th}>Status</th>
               <th className={th}>Localização</th>
               <th className={th}>Indústria</th>
@@ -731,9 +736,10 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
                 <td className={`${td} text-gray-400 font-bold`}>{i + 1}</td>
                 <td className="px-4 py-3.5"><BrandDots brands={c.brands} companyLogo={c.company_logo} companyName={c.company_name} logos={brandLogos} /></td>
                 <td className={tdBold}>{c.company_name}</td>
+                <td className={`${td} text-[10px] font-mono text-gray-400`}>{c.cnpj || '-'}</td>
                 <td className={td}>
-                  <span className={`text-[10px] font-black ${c.status === 'active' ? 'text-emerald-600' : 'text-gray-400'}`}>
-                    {c.status === 'active' ? 'Ativo' : 'Inativo'}
+                  <span className={`text-[10px] font-black ${c.status === 'active' ? 'text-emerald-600' : c.status === 'churned' ? 'text-red-500' : 'text-gray-400'}`}>
+                    {c.status === 'active' ? 'Ativo' : c.status === 'churned' ? 'Churned' : 'Inativo'}
                   </span>
                 </td>
                 <td className={td}>{c.location || '-'}</td>
@@ -803,7 +809,7 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
               <tr key={c.id} className={trHover} onClick={() => openDetail(c)}>
                 <td className="px-4 py-3.5"><BrandDots brands={c.brands} companyLogo={c.company_logo} companyName={c.company_name} logos={brandLogos} /></td>
                 <td className={tdBold}>{c.company_name}</td>
-                <td className={td}><span className={c.status === 'active' ? 'text-emerald-600 font-bold' : 'text-gray-400'}>{c.status === 'active' ? 'Ativo' : 'Inativo'}</span></td>
+                <td className={td}><span className={`font-bold ${c.status === 'active' ? 'text-emerald-600' : c.status === 'churned' ? 'text-red-500' : 'text-gray-400'}`}>{c.status === 'active' ? 'Ativo' : c.status === 'churned' ? 'Churned' : 'Inativo'}</span></td>
                 <td className={`${td} font-bold text-blue-600`}>{c.squad_name || '-'}</td>
                 <td className={td}>{fmtDate(c.contato_trimestre)}</td>
                 <td className={td}>{fmtDate(c.assinatura_date)}</td>
@@ -1068,9 +1074,17 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
               <span className="font-bold text-gray-400">Indústria</span><span className="font-black text-gray-900">{c.industry || '-'}</span>
               <span className="font-bold text-gray-400">Localização</span><span className="font-black text-gray-900">{c.location || '-'}</span>
               <span className="font-bold text-gray-400">Funcionários</span><span className="font-black text-gray-900">{c.num_funcionarios || '-'}</span>
+              <span className="font-bold text-gray-400">CNPJ</span><span className="font-black text-gray-900">{c.cnpj || '-'}</span>
               <span className="font-bold text-gray-400">Website</span>
               <span>{c.website ? <a href={c.website.startsWith('http') ? c.website : `https://${c.website}`} target="_blank" rel="noopener noreferrer" className="font-bold text-brand hover:underline">{c.website}</a> : <span className="text-gray-300">-</span>}</span>
             </div>
+            {c.assinatura_descricao && (
+              <div className="p-3 bg-blue-50 rounded-xl border border-blue-100">
+                <span className="text-[8px] font-black text-blue-500 uppercase tracking-widest block mb-1">Assinatura</span>
+                <p className="text-[11px] font-bold text-blue-900/70 leading-relaxed">{c.assinatura_descricao}</p>
+                {c.forma_pagamento && <span className="text-[9px] font-bold text-blue-400 mt-1 block">Pagamento: {c.forma_pagamento}</span>}
+              </div>
+            )}
             <div className="pt-4 border-t border-gray-50">
               <div className="flex items-center justify-between">
                 <div>
