@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { CadastroRecord, CadastroWithStats, CadastroStatus, ProposalRecord, formatCurrency, formatCurrencyShort } from '../types';
 import { SupabaseService } from '../services/api';
+import { LEADBOX_CLIENTS } from '../data/leadbox-clients';
 
 const STATUS_OPTIONS: CadastroStatus[] = ['LEAD', 'ATIVO', 'CLIENTE', 'INATIVO'];
 const STATUS_COLORS: Record<string, string> = {
@@ -94,6 +95,22 @@ const CadastroGeral: React.FC = () => {
     setRecords(data);
     setIsLoading(false);
   }, []);
+
+  // Seed LeadBox clients on first load if they don't exist yet
+  const seededRef = useRef(false);
+  useEffect(() => {
+    if (seededRef.current) return;
+    seededRef.current = true;
+    (async () => {
+      const existing = await SupabaseService.fetchCadastro();
+      const existingNames = new Set(existing.map(r => (r.nome || '').toUpperCase().trim()));
+      const toInsert = LEADBOX_CLIENTS.filter(c => !existingNames.has((c.nome || '').toUpperCase().trim()));
+      if (toInsert.length > 0) {
+        await SupabaseService.bulkInsertCadastro(toInsert);
+        loadData();
+      }
+    })();
+  }, [loadData]);
 
   useEffect(() => { loadData(); }, [loadData]);
 
@@ -285,6 +302,29 @@ const CadastroGeral: React.FC = () => {
           <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 group-focus-within:text-black transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
         </div>
 
+        {/* EMPRESA FILTER - Prominent top filter */}
+        <div className="space-y-2">
+          <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Empresa</span>
+          <div className="flex flex-wrap gap-2">
+            {empresas.map(emp => {
+              const count = emp === 'Todos' ? records.length : records.filter(r => r.empresa === emp).length;
+              const isActive = filterEmpresa === emp;
+              const colorMap: Record<string, string> = {
+                LeadBox: isActive ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200' : 'bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100',
+                Phant: isActive ? 'bg-violet-600 text-white shadow-lg shadow-violet-200' : 'bg-violet-50 border border-violet-200 text-violet-700 hover:bg-violet-100',
+                Vivemus: isActive ? 'bg-rose-600 text-white shadow-lg shadow-rose-200' : 'bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100',
+              };
+              const defaultStyle = isActive ? 'bg-black text-white shadow-lg' : 'bg-white border border-gray-100 text-gray-400 hover:text-black hover:border-black/10';
+              const style = colorMap[emp] || defaultStyle;
+              return (
+                <button key={emp} onClick={() => setFilterEmpresa(emp)} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${style}`}>
+                  {emp} <span className="ml-1 opacity-60">({count})</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
         {/* FILTERS */}
         <div className="flex flex-wrap gap-6">
           <div className="space-y-2">
@@ -308,14 +348,6 @@ const CadastroGeral: React.FC = () => {
               <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Origem</span>
               <select value={filterOrigem} onChange={(e) => setFilterOrigem(e.target.value)} className="px-5 py-2.5 rounded-xl text-[11px] font-bold bg-white border border-gray-100 text-gray-600 focus:outline-none focus:ring-2 focus:ring-black/10 cursor-pointer">
                 {origens.map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
-            </div>
-          )}
-          {empresas.length > 1 && (
-            <div className="space-y-2">
-              <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Empresa</span>
-              <select value={filterEmpresa} onChange={(e) => setFilterEmpresa(e.target.value)} className="px-5 py-2.5 rounded-xl text-[11px] font-bold bg-white border border-gray-100 text-gray-600 focus:outline-none focus:ring-2 focus:ring-black/10 cursor-pointer">
-                {empresas.map(e => <option key={e} value={e}>{e}</option>)}
               </select>
             </div>
           )}
