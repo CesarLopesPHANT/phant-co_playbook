@@ -24,6 +24,50 @@ const FIELD_MAP: Record<string, keyof CadastroRecord> = {
   observacoes: 'observacoes', obs: 'observacoes', notes: 'observacoes', observacao: 'observacoes',
 };
 
+type TabKey = 'todos' | 'leadbox' | 'phant' | 'vivemus' | 'leads';
+
+interface TabDef {
+  key: TabKey;
+  label: string;
+  icon: React.ReactNode;
+  color: string;
+  activeColor: string;
+  filter: (r: CadastroWithStats) => boolean;
+}
+
+const TABS: TabDef[] = [
+  {
+    key: 'todos', label: 'Visão Geral', filter: () => true,
+    color: 'text-gray-500 border-transparent hover:text-black hover:border-gray-300',
+    activeColor: 'text-black border-black',
+    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="3" width="7" height="7" /><rect x="14" y="3" width="7" height="7" /><rect x="14" y="14" width="7" height="7" /><rect x="3" y="14" width="7" height="7" /></svg>,
+  },
+  {
+    key: 'leadbox', label: 'LeadBox', filter: r => r.empresa === 'LeadBox',
+    color: 'text-emerald-500 border-transparent hover:text-emerald-700 hover:border-emerald-300',
+    activeColor: 'text-emerald-700 border-emerald-600',
+    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" /></svg>,
+  },
+  {
+    key: 'phant', label: 'Phant', filter: r => r.empresa === 'Phant' || (r as any)._source === 'clients',
+    color: 'text-violet-500 border-transparent hover:text-violet-700 hover:border-violet-300',
+    activeColor: 'text-violet-700 border-violet-600',
+    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2" /></svg>,
+  },
+  {
+    key: 'vivemus', label: 'Vivemus', filter: r => r.empresa === 'Vivemus',
+    color: 'text-rose-500 border-transparent hover:text-rose-700 hover:border-rose-300',
+    activeColor: 'text-rose-700 border-rose-600',
+    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z" /></svg>,
+  },
+  {
+    key: 'leads', label: 'Pipeline', filter: r => r.status === 'LEAD' || r.status === 'ATIVO',
+    color: 'text-amber-500 border-transparent hover:text-amber-700 hover:border-amber-300',
+    activeColor: 'text-amber-700 border-amber-600',
+    icon: <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="22 12 18 12 15 21 9 3 6 12 2 12" /></svg>,
+  },
+];
+
 function parseCSV(text: string): string[][] {
   const rows: string[][] = [];
   let current = '';
@@ -63,18 +107,18 @@ function mapHeaders(headers: string[]): (keyof CadastroRecord | null)[] {
   });
 }
 
-const PAGE_SIZES = [25, 50, 100, 0]; // 0 = Todos
+const PAGE_SIZES = [25, 50, 100, 0];
 
 const CadastroGeral: React.FC = () => {
   const [records, setRecords] = useState<CadastroWithStats[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState<TabKey>('todos');
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState<string>('Todos');
   const [filterSegmento, setFilterSegmento] = useState<string>('Todos');
   const [filterOrigem, setFilterOrigem] = useState<string>('Todos');
-  const [filterEmpresa, setFilterEmpresa] = useState<string>('Todos');
-  const [sortField, setSortField] = useState<'nome' | 'created_at' | 'empresa' | 'valor_total'>('created_at');
-  const [sortAsc, setSortAsc] = useState(false);
+  const [sortField, setSortField] = useState<'nome' | 'created_at' | 'empresa' | 'valor_total'>('nome');
+  const [sortAsc, setSortAsc] = useState(true);
   const [editingRecord, setEditingRecord] = useState<Partial<CadastroRecord> | null>(null);
   const [importPreview, setImportPreview] = useState<Partial<CadastroRecord>[] | null>(null);
   const [importStats, setImportStats] = useState<{ total: number; valid: number } | null>(null);
@@ -96,7 +140,6 @@ const CadastroGeral: React.FC = () => {
     setIsLoading(false);
   }, []);
 
-  // Seed LeadBox clients on first load if they don't exist yet
   const seededRef = useRef(false);
   useEffect(() => {
     if (seededRef.current) return;
@@ -114,46 +157,54 @@ const CadastroGeral: React.FC = () => {
 
   useEffect(() => { loadData(); }, [loadData]);
 
-  // =================== KPI CALCULATIONS ===================
+  // =================== TAB-SCOPED DATA ===================
+
+  const currentTab = TABS.find(t => t.key === activeTab) || TABS[0];
+  const tabRecords = useMemo(() => records.filter(currentTab.filter), [records, currentTab]);
+
+  // =================== KPI CALCULATIONS (scoped to tab) ===================
 
   const kpis = useMemo(() => {
-    const total = records.length;
-    const leads = records.filter(r => r.status === 'LEAD').length;
-    const ativos = records.filter(r => r.status === 'ATIVO').length;
-    const clientes = records.filter(r => r.status === 'CLIENTE').length;
-    const valorTotal = records.reduce((acc, r) => acc + r.valor_total, 0);
-    const valorAprovado = records.reduce((acc, r) => acc + r.valor_aprovado, 0);
+    const src = tabRecords;
+    const total = src.length;
+    const leads = src.filter(r => r.status === 'LEAD').length;
+    const ativos = src.filter(r => r.status === 'ATIVO').length;
+    const clientes = src.filter(r => r.status === 'CLIENTE').length;
+    const inativos = src.filter(r => r.status === 'INATIVO').length;
+    const valorTotal = src.reduce((acc, r) => acc + r.valor_total, 0);
+    const valorAprovado = src.reduce((acc, r) => acc + r.valor_aprovado, 0);
     const taxaConversao = total > 0 ? Math.round((clientes / total) * 100) : 0;
     const ticketMedio = clientes > 0 ? valorAprovado / clientes : 0;
-    return { total, leads, ativos, clientes, valorTotal, valorAprovado, taxaConversao, ticketMedio };
-  }, [records]);
+    return { total, leads, ativos, clientes, inativos, valorTotal, valorAprovado, taxaConversao, ticketMedio };
+  }, [tabRecords]);
 
-  // =================== FILTERS ===================
+  // =================== FILTERS (scoped to tab) ===================
 
   const segmentos = useMemo(() => {
-    const set = new Set(records.map(r => r.segmento).filter(Boolean));
+    const set = new Set(tabRecords.map(r => r.segmento).filter(Boolean));
     return ['Todos', ...Array.from(set).sort()];
-  }, [records]);
+  }, [tabRecords]);
 
   const origens = useMemo(() => {
-    const set = new Set(records.map(r => r.origem).filter(Boolean));
+    const set = new Set(tabRecords.map(r => r.origem).filter(Boolean));
     return ['Todos', ...Array.from(set).sort()];
-  }, [records]);
-
-  const empresas = useMemo(() => {
-    const set = new Set(records.map(r => r.empresa).filter(Boolean));
-    return ['Todos', ...Array.from(set).sort()];
-  }, [records]);
+  }, [tabRecords]);
 
   const filteredRecords = useMemo(() => {
-    let result = [...records];
+    let result = [...tabRecords];
     if (filterStatus !== 'Todos') result = result.filter(r => r.status === filterStatus);
     if (filterSegmento !== 'Todos') result = result.filter(r => r.segmento === filterSegmento);
     if (filterOrigem !== 'Todos') result = result.filter(r => r.origem === filterOrigem);
-    if (filterEmpresa !== 'Todos') result = result.filter(r => r.empresa === filterEmpresa);
     if (searchTerm.trim()) {
       const term = searchTerm.toLowerCase();
-      result = result.filter(r => r.nome?.toLowerCase().includes(term) || r.email?.toLowerCase().includes(term) || r.empresa?.toLowerCase().includes(term) || r.telefone?.includes(term));
+      result = result.filter(r =>
+        r.nome?.toLowerCase().includes(term) ||
+        r.email?.toLowerCase().includes(term) ||
+        r.empresa?.toLowerCase().includes(term) ||
+        r.telefone?.includes(term) ||
+        r.segmento?.toLowerCase().includes(term) ||
+        r.observacoes?.toLowerCase().includes(term)
+      );
     }
     result.sort((a, b) => {
       if (sortField === 'valor_total') return sortAsc ? a.valor_total - b.valor_total : b.valor_total - a.valor_total;
@@ -162,9 +213,8 @@ const CadastroGeral: React.FC = () => {
       return sortAsc ? valA.localeCompare(valB) : valB.localeCompare(valA);
     });
     return result;
-  }, [records, filterStatus, filterSegmento, filterOrigem, filterEmpresa, searchTerm, sortField, sortAsc]);
+  }, [tabRecords, filterStatus, filterSegmento, filterOrigem, searchTerm, sortField, sortAsc]);
 
-  // Pagination
   const totalPages = pageSize === 0 ? 1 : Math.ceil(filteredRecords.length / pageSize);
   const paginatedRecords = useMemo(() => {
     if (pageSize === 0) return filteredRecords;
@@ -172,8 +222,15 @@ const CadastroGeral: React.FC = () => {
     return filteredRecords.slice(start, start + pageSize);
   }, [filteredRecords, currentPage, pageSize]);
 
-  // Reset page when filters change
-  useEffect(() => { setCurrentPage(1); }, [filterStatus, filterSegmento, filterOrigem, filterEmpresa, searchTerm, pageSize]);
+  useEffect(() => { setCurrentPage(1); }, [filterStatus, filterSegmento, filterOrigem, searchTerm, pageSize, activeTab]);
+
+  // Reset secondary filters when changing tab
+  useEffect(() => {
+    setFilterStatus('Todos');
+    setFilterSegmento('Todos');
+    setFilterOrigem('Todos');
+    setSearchTerm('');
+  }, [activeTab]);
 
   // =================== HANDLERS ===================
 
@@ -245,7 +302,7 @@ const CadastroGeral: React.FC = () => {
     else { setSortField(field); setSortAsc(true); }
   };
 
-  const activeFilters = [filterStatus, filterSegmento, filterOrigem, filterEmpresa].filter(f => f !== 'Todos').length;
+  const activeFilters = [filterStatus, filterSegmento, filterOrigem].filter(f => f !== 'Todos').length;
 
   const getProposalStatusBadge = (status?: string) => {
     if (status === 'APPROVED') return <span className="px-2 py-0.5 bg-green-100 text-green-700 text-[8px] font-black uppercase rounded">Aprovada</span>;
@@ -253,18 +310,44 @@ const CadastroGeral: React.FC = () => {
     return <span className="px-2 py-0.5 bg-yellow-100 text-yellow-700 text-[8px] font-black uppercase rounded">Pendente</span>;
   };
 
+  // =================== TAB-SPECIFIC KPI CONFIG ===================
+  const getKpiCards = () => {
+    if (activeTab === 'leads') {
+      return [
+        { label: 'Leads', value: kpis.leads, color: 'text-amber-600', bg: 'bg-amber-50 border-amber-100' },
+        { label: 'Ativos', value: kpis.ativos, color: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-100' },
+        { label: 'Total Pipeline', value: kpis.total, color: 'text-gray-900', bg: 'bg-gray-50 border-gray-100' },
+        { label: 'Valor Pipeline', value: formatCurrencyShort(kpis.valorTotal), color: 'text-purple-600', bg: 'bg-purple-50 border-purple-100' },
+        { label: 'Aprovado', value: formatCurrencyShort(kpis.valorAprovado), color: 'text-blue-600', bg: 'bg-blue-50 border-blue-100' },
+      ];
+    }
+    return [
+      { label: 'Total', value: kpis.total, color: 'text-gray-900', bg: 'bg-gray-50 border-gray-100' },
+      { label: 'Clientes', value: kpis.clientes, color: 'text-blue-600', bg: 'bg-blue-50 border-blue-100' },
+      { label: 'Inativos', value: kpis.inativos, color: 'text-gray-400', bg: 'bg-gray-50 border-gray-100' },
+      { label: 'Conversão', value: `${kpis.taxaConversao}%`, color: 'text-purple-600', bg: 'bg-purple-50 border-purple-100' },
+      { label: 'Ticket Médio', value: formatCurrencyShort(kpis.ticketMedio), color: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-100' },
+    ];
+  };
+
+  // =================== TAB COUNTS ===================
+  const tabCounts = useMemo(() => {
+    const counts: Record<TabKey, number> = { todos: 0, leadbox: 0, phant: 0, vivemus: 0, leads: 0 };
+    TABS.forEach(t => { counts[t.key] = records.filter(t.filter).length; });
+    return counts;
+  }, [records]);
+
   return (
-    <div className="max-w-7xl mx-auto space-y-10 pb-24 px-4 animate-in fade-in duration-700">
+    <div className="max-w-7xl mx-auto space-y-8 pb-24 px-4 animate-in fade-in duration-700">
       {toast && <div className="fixed top-6 right-6 z-[200] bg-black text-white px-6 py-4 rounded-2xl shadow-2xl font-bold text-sm animate-in slide-in-from-top duration-300">{toast}</div>}
 
-      {/* HEADER */}
-      <header className="space-y-8">
+      {/* =================== HEADER + TABS =================== */}
+      <header className="space-y-6">
         <div className="flex flex-col md:flex-row md:items-end justify-between gap-6">
           <div>
-            <h1 className="text-5xl md:text-6xl font-black text-gray-900 tracking-tighter leading-none">Gestão de Clientes</h1>
+            <h1 className="text-5xl md:text-6xl font-black text-gray-900 tracking-tighter leading-none">Cadastro Geral</h1>
             <p className="text-gray-400 text-lg font-medium tracking-tight mt-2">
-              Base de contatos, leads e clientes
-              <span className="ml-3 text-[10px] font-black bg-gray-100 text-gray-400 px-3 py-1 rounded-full uppercase tracking-widest">{records.length} registros</span>
+              Base unificada de contatos, leads e clientes
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -280,15 +363,28 @@ const CadastroGeral: React.FC = () => {
           </div>
         </div>
 
+        {/* TAB NAVIGATION */}
+        <nav className="flex gap-1 border-b border-gray-100 overflow-x-auto">
+          {TABS.map(tab => {
+            const isActive = activeTab === tab.key;
+            const count = tabCounts[tab.key];
+            return (
+              <button
+                key={tab.key}
+                onClick={() => setActiveTab(tab.key)}
+                className={`flex items-center gap-2 px-5 py-3.5 border-b-2 text-[11px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${isActive ? tab.activeColor : tab.color}`}
+              >
+                {tab.icon}
+                {tab.label}
+                <span className={`ml-1 text-[9px] px-2 py-0.5 rounded-full font-black ${isActive ? 'bg-black/10' : 'bg-gray-100 text-gray-400'}`}>{count}</span>
+              </button>
+            );
+          })}
+        </nav>
+
         {/* KPI CARDS */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-          {[
-            { label: 'Leads', value: kpis.leads, color: 'text-amber-600', bg: 'bg-amber-50 border-amber-100' },
-            { label: 'Ativos', value: kpis.ativos, color: 'text-emerald-600', bg: 'bg-emerald-50 border-emerald-100' },
-            { label: 'Clientes', value: kpis.clientes, color: 'text-blue-600', bg: 'bg-blue-50 border-blue-100' },
-            { label: 'Conversão', value: `${kpis.taxaConversao}%`, color: 'text-purple-600', bg: 'bg-purple-50 border-purple-100' },
-            { label: 'Ticket Médio', value: formatCurrencyShort(kpis.ticketMedio), color: 'text-gray-900', bg: 'bg-gray-50 border-gray-100' },
-          ].map((kpi, i) => (
+          {getKpiCards().map((kpi, i) => (
             <div key={i} className={`p-5 rounded-[24px] border ${kpi.bg} space-y-1`}>
               <span className="text-[9px] font-black uppercase tracking-widest text-gray-400">{kpi.label}</span>
               <p className={`text-2xl font-black tracking-tighter ${kpi.color}`}>{kpi.value}</p>
@@ -296,70 +392,42 @@ const CadastroGeral: React.FC = () => {
           ))}
         </div>
 
-        {/* SEARCH */}
-        <div className="relative w-full md:w-96 group">
-          <input type="text" placeholder="Buscar por nome, e-mail, empresa..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-12 pr-6 py-4 bg-white border border-gray-100 rounded-[20px] shadow-sm text-sm font-bold focus:outline-none focus:ring-4 focus:ring-black/5 transition-all" />
-          <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 group-focus-within:text-black transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
-        </div>
-
-        {/* EMPRESA FILTER - Prominent top filter */}
-        <div className="space-y-2">
-          <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Empresa</span>
-          <div className="flex flex-wrap gap-2">
-            {empresas.map(emp => {
-              const count = emp === 'Todos' ? records.length : records.filter(r => r.empresa === emp).length;
-              const isActive = filterEmpresa === emp;
-              const colorMap: Record<string, string> = {
-                LeadBox: isActive ? 'bg-emerald-600 text-white shadow-lg shadow-emerald-200' : 'bg-emerald-50 border border-emerald-200 text-emerald-700 hover:bg-emerald-100',
-                Phant: isActive ? 'bg-violet-600 text-white shadow-lg shadow-violet-200' : 'bg-violet-50 border border-violet-200 text-violet-700 hover:bg-violet-100',
-                Vivemus: isActive ? 'bg-rose-600 text-white shadow-lg shadow-rose-200' : 'bg-rose-50 border border-rose-200 text-rose-700 hover:bg-rose-100',
-              };
-              const defaultStyle = isActive ? 'bg-black text-white shadow-lg' : 'bg-white border border-gray-100 text-gray-400 hover:text-black hover:border-black/10';
-              const style = colorMap[emp] || defaultStyle;
-              return (
-                <button key={emp} onClick={() => setFilterEmpresa(emp)} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${style}`}>
-                  {emp} <span className="ml-1 opacity-60">({count})</span>
-                </button>
-              );
-            })}
+        {/* SEARCH + FILTERS */}
+        <div className="flex flex-col md:flex-row gap-4 items-start md:items-center">
+          <div className="relative w-full md:w-80 group">
+            <input type="text" placeholder="Buscar por nome, empresa, segmento..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="w-full pl-12 pr-6 py-3.5 bg-white border border-gray-100 rounded-2xl shadow-sm text-sm font-bold focus:outline-none focus:ring-4 focus:ring-black/5 transition-all" />
+            <svg className="absolute left-4 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-300 group-focus-within:text-black transition-colors" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
           </div>
-        </div>
 
-        {/* FILTERS */}
-        <div className="flex flex-wrap gap-6">
-          <div className="space-y-2">
-            <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Status</span>
-            <div className="flex flex-wrap gap-2">
-              {['Todos', ...STATUS_OPTIONS].map(opt => (
-                <button key={opt} onClick={() => setFilterStatus(opt)} className={`px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filterStatus === opt ? 'bg-black text-white shadow-lg' : 'bg-white border border-gray-100 text-gray-400 hover:text-black hover:border-black/10'}`}>{opt}</button>
-              ))}
-            </div>
+          <div className="flex flex-wrap gap-2 items-center">
+            {['Todos', ...STATUS_OPTIONS].map(opt => (
+              <button key={opt} onClick={() => setFilterStatus(opt)} className={`px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all ${filterStatus === opt ? 'bg-black text-white shadow-lg' : 'bg-white border border-gray-100 text-gray-400 hover:text-black hover:border-black/10'}`}>{opt}</button>
+            ))}
           </div>
-          {segmentos.length > 1 && (
-            <div className="space-y-2">
-              <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Segmento</span>
-              <select value={filterSegmento} onChange={(e) => setFilterSegmento(e.target.value)} className="px-5 py-2.5 rounded-xl text-[11px] font-bold bg-white border border-gray-100 text-gray-600 focus:outline-none focus:ring-2 focus:ring-black/10 cursor-pointer">
-                {segmentos.map(s => <option key={s} value={s}>{s}</option>)}
-              </select>
-            </div>
+
+          {segmentos.length > 2 && (
+            <select value={filterSegmento} onChange={(e) => setFilterSegmento(e.target.value)} className="px-4 py-2 rounded-xl text-[11px] font-bold bg-white border border-gray-100 text-gray-600 focus:outline-none focus:ring-2 focus:ring-black/10 cursor-pointer">
+              <option value="Todos">Segmento</option>
+              {segmentos.filter(s => s !== 'Todos').map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
           )}
-          {origens.length > 1 && (
-            <div className="space-y-2">
-              <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Origem</span>
-              <select value={filterOrigem} onChange={(e) => setFilterOrigem(e.target.value)} className="px-5 py-2.5 rounded-xl text-[11px] font-bold bg-white border border-gray-100 text-gray-600 focus:outline-none focus:ring-2 focus:ring-black/10 cursor-pointer">
-                {origens.map(o => <option key={o} value={o}>{o}</option>)}
-              </select>
-            </div>
+
+          {origens.length > 2 && (
+            <select value={filterOrigem} onChange={(e) => setFilterOrigem(e.target.value)} className="px-4 py-2 rounded-xl text-[11px] font-bold bg-white border border-gray-100 text-gray-600 focus:outline-none focus:ring-2 focus:ring-black/10 cursor-pointer">
+              <option value="Todos">Origem</option>
+              {origens.filter(o => o !== 'Todos').map(o => <option key={o} value={o}>{o}</option>)}
+            </select>
           )}
+
           {activeFilters > 0 && (
-            <div className="flex items-end">
-              <button onClick={() => { setFilterStatus('Todos'); setFilterSegmento('Todos'); setFilterOrigem('Todos'); setFilterEmpresa('Todos'); }} className="px-4 py-2.5 text-[10px] font-black text-red-400 hover:text-red-600 uppercase tracking-widest transition-colors">Limpar filtros ({activeFilters})</button>
-            </div>
+            <button onClick={() => { setFilterStatus('Todos'); setFilterSegmento('Todos'); setFilterOrigem('Todos'); }} className="px-3 py-2 text-[10px] font-black text-red-400 hover:text-red-600 uppercase tracking-widest transition-colors">
+              Limpar ({activeFilters})
+            </button>
           )}
         </div>
       </header>
 
-      {/* TABLE */}
+      {/* =================== TABLE =================== */}
       {isLoading ? (
         <div className="flex flex-col items-center justify-center py-40 space-y-4">
           <div className="w-10 h-10 border-4 border-black border-t-transparent rounded-full animate-spin"></div>
@@ -372,7 +440,7 @@ const CadastroGeral: React.FC = () => {
           </div>
           <div className="text-center space-y-2">
             <p className="text-lg font-black text-gray-400 tracking-tight">Nenhum registro encontrado</p>
-            <p className="text-sm text-gray-300 font-medium">Importe um CSV ou adicione manualmente.</p>
+            <p className="text-sm text-gray-300 font-medium">Ajuste os filtros ou adicione novos registros.</p>
           </div>
         </div>
       ) : (
@@ -384,7 +452,7 @@ const CadastroGeral: React.FC = () => {
                   {[
                     { key: 'nome' as const, label: 'Nome' },
                     { key: null, label: 'Contato' },
-                    { key: 'empresa' as const, label: 'Empresa' },
+                    ...(activeTab === 'todos' ? [{ key: 'empresa' as const, label: 'Empresa' }] : []),
                     { key: null, label: 'Segmento' },
                     { key: null, label: 'Status' },
                     { key: null, label: 'Propostas' },
@@ -411,8 +479,20 @@ const CadastroGeral: React.FC = () => {
                     <td className="px-5 py-4">
                       {record.email && <span className="block text-[11px] font-bold text-gray-500">{record.email}</span>}
                       {record.telefone && <span className="block text-[11px] font-bold text-gray-400">{record.telefone}</span>}
+                      {!record.email && !record.telefone && <span className="text-[11px] font-bold text-gray-300">---</span>}
                     </td>
-                    <td className="px-5 py-4 text-[11px] font-bold text-gray-600">{record.empresa || '---'}</td>
+                    {activeTab === 'todos' && (
+                      <td className="px-5 py-4">
+                        {record.empresa ? (
+                          <span className={`inline-block px-2.5 py-1 rounded-lg text-[10px] font-black uppercase tracking-wider ${
+                            record.empresa === 'LeadBox' ? 'bg-emerald-50 text-emerald-600 border border-emerald-100' :
+                            record.empresa === 'Phant' ? 'bg-violet-50 text-violet-600 border border-violet-100' :
+                            record.empresa === 'Vivemus' ? 'bg-rose-50 text-rose-600 border border-rose-100' :
+                            'bg-gray-50 text-gray-500 border border-gray-100'
+                          }`}>{record.empresa}</span>
+                        ) : <span className="text-[11px] font-bold text-gray-300">---</span>}
+                      </td>
+                    )}
                     <td className="px-5 py-4 text-[11px] font-bold text-gray-400">{record.segmento || '---'}</td>
                     <td className="px-5 py-4">
                       <span className={`inline-block px-3 py-1 rounded-lg text-[9px] font-black uppercase tracking-widest ${STATUS_COLORS[record.status] || STATUS_COLORS.LEAD}`}>{record.status}</span>
@@ -443,9 +523,11 @@ const CadastroGeral: React.FC = () => {
               </tbody>
             </table>
           </div>
+
+          {/* PAGINATION */}
           <div className="px-6 py-4 border-t border-gray-50 flex flex-wrap items-center justify-between gap-4">
             <div className="flex items-center gap-4">
-              <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest">{filteredRecords.length} de {records.length} registros</span>
+              <span className="text-[10px] font-black text-gray-300 uppercase tracking-widest">{filteredRecords.length} de {tabRecords.length} registros</span>
               <div className="flex items-center gap-2">
                 <span className="text-[9px] font-black text-gray-300 uppercase tracking-widest">Exibir:</span>
                 {PAGE_SIZES.map(size => (
@@ -471,15 +553,10 @@ const CadastroGeral: React.FC = () => {
                 </button>
                 {Array.from({ length: Math.min(totalPages, 7) }, (_, i) => {
                   let page: number;
-                  if (totalPages <= 7) {
-                    page = i + 1;
-                  } else if (currentPage <= 4) {
-                    page = i + 1;
-                  } else if (currentPage >= totalPages - 3) {
-                    page = totalPages - 6 + i;
-                  } else {
-                    page = currentPage - 3 + i;
-                  }
+                  if (totalPages <= 7) { page = i + 1; }
+                  else if (currentPage <= 4) { page = i + 1; }
+                  else if (currentPage >= totalPages - 3) { page = totalPages - 6 + i; }
+                  else { page = currentPage - 3 + i; }
                   return (
                     <button
                       key={page}
@@ -550,7 +627,7 @@ const CadastroGeral: React.FC = () => {
             {detailRecord.observacoes && (
               <div className="mb-8 p-4 bg-amber-50 rounded-2xl border border-amber-100">
                 <span className="text-[8px] font-black text-amber-500 uppercase tracking-widest block mb-2">Observações</span>
-                <p className="text-[11px] font-medium text-amber-900/70 leading-relaxed">{detailRecord.observacoes}</p>
+                <p className="text-[11px] font-medium text-amber-900/70 leading-relaxed whitespace-pre-line">{detailRecord.observacoes}</p>
               </div>
             )}
 
@@ -650,10 +727,10 @@ const CadastroGeral: React.FC = () => {
                 { key: 'nome', label: 'Nome *', placeholder: 'Nome completo' },
                 { key: 'email', label: 'E-mail', placeholder: 'email@empresa.com' },
                 { key: 'telefone', label: 'Telefone', placeholder: '(11) 99999-9999' },
-                { key: 'empresa', label: 'Empresa', placeholder: 'Nome da empresa' },
+                { key: 'empresa', label: 'Empresa', placeholder: 'Ex: LeadBox, Phant, Vivemus' },
                 { key: 'cargo', label: 'Cargo', placeholder: 'Cargo / função' },
                 { key: 'segmento', label: 'Segmento', placeholder: 'Ex: Tecnologia, Varejo...' },
-                { key: 'origem', label: 'Origem', placeholder: 'Ex: Indicação, Site, LinkedIn...' },
+                { key: 'origem', label: 'Origem', placeholder: 'Ex: Indicação, Conciliação...' },
               ].map(field => (
                 <div key={field.key} className="space-y-1.5">
                   <label className="text-[9px] font-black text-gray-400 uppercase tracking-widest">{field.label}</label>
