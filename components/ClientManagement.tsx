@@ -311,6 +311,9 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
   const [importHeaders, setImportHeaders] = useState<string[]>([]);
   const [importProgress, setImportProgress] = useState<{ done: number; total: number; errors: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [showReconcileModal, setShowReconcileModal] = useState(false);
+  const [reconcileChoices, setReconcileChoices] = useState<Record<string, { keepId: string; mergeFields: boolean }>>({});
+  const [reconcileProgress, setReconcileProgress] = useState<{ done: number; total: number; errors: string[] } | null>(null);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -333,10 +336,13 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
       if (showImportModal && !(importProgress && importProgress.done < importProgress.total)) {
         setShowImportModal(false); resetImport();
       }
+      if (showReconcileModal && !(reconcileProgress && reconcileProgress.done < reconcileProgress.total)) {
+        setShowReconcileModal(false);
+      }
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [showNewForm, isEditing, showPlanningForm, showImportModal, importProgress]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [showNewForm, isEditing, showPlanningForm, showImportModal, importProgress, showReconcileModal, reconcileProgress]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ====== METRICS ======
   const metrics = useMemo(() => {
@@ -427,6 +433,146 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
       if (hit && hit.id !== excludeId) return hit;
     }
     return null;
+  };
+
+  // Grupos de duplicatas no banco (por nome normalizado ou CNPJ)
+  const duplicateGroups = useMemo(() => {
+    const groupMap = new Map<string, ClientRecord[]>();
+    const assigned = new Map<string, string>(); // clientId -> groupKey
+
+    const assign = (c: ClientRecord, key: string) => {
+      const existingKey = assigned.get(c.id);
+      if (existingKey && existingKey !== key) {
+        // já está em outro grupo: funde os dois grupos usando o key existente
+        const merged = groupMap.get(existingKey) || [];
+        const current = groupMap.get(key) || [];
+        current.forEach(x => { if (!merged.some(m => m.id === x.id)) merged.push(x); });
+        groupMap.set(existingKey, merged);
+        groupMap.delete(key);
+        current.forEach(x => assigned.set(x.id, existingKey));
+        return;
+      }
+      assigned.set(c.id, key);
+      const arr = groupMap.get(key) || [];
+      if (!arr.some(x => x.id === c.id)) arr.push(c);
+      groupMap.set(key, arr);
+    };
+
+    // Agrupa por CNPJ primeiro (mais confiável)
+    const cnpjBuckets = new Map<string, ClientRecord[]>();
+    clients.forEach(c => {
+      const cn = normCnpj(c.cnpj);
+      if (cn && cn.length >= 8) {
+        const arr = cnpjBuckets.get(cn) || [];
+        arr.push(c); cnpjBuckets.set(cn, arr);
+      }
+    });
+    cnpjBuckets.forEach((arr, key) => {
+      if (arr.length > 1) arr.forEach(c => assign(c, `cnpj:${key}`));
+    });
+
+    // Depois por nome
+    const nameBuckets = new Map<string, ClientRecord[]>();
+    clients.forEach(c => {
+      const n = normName(c.company_name);
+      if (n && n.length >= 3) {
+        const arr = nameBuckets.get(n) || [];
+        arr.push(c); nameBuckets.set(n, arr);
+      }
+    });
+    nameBuckets.forEach((arr, key) => {
+      if (arr.length > 1) arr.forEach(c => assign(c, `name:${key}`));
+    });
+
+    // Retorna só grupos com 2+ clientes
+    return Array.from(groupMap.entries())
+      .filter(([, arr]) => arr.length > 1)
+      .map(([key, arr]) => ({
+        key,
+        reason: key.startsWith('cnpj:') ? 'CNPJ idêntico' : 'Nome equivalente',
+        clients: arr.sort((a, b) => {
+          // Ordena por completude (mais campos preenchidos primeiro) e data
+          const score = (c: ClientRecord) => {
+            let s = 0;
+            if (c.cnpj) s += 3; if (c.mrr) s += 2; if (c.fee) s += 1;
+            if (c.contact?.email) s += 1; if (c.contact?.phone) s += 1;
+            if (c.squad_name) s += 1; if (c.industry) s += 1;
+            if (c.data_entrada) s += 1; if (c.company_logo) s += 1;
+            return s;
+          };
+          const diff = score(b) - score(a);
+          if (diff !== 0) return diff;
+          return (b.updated_at || '').localeCompare(a.updated_at || '');
+        }),
+      }));
+  }, [clients]);
+
+  // Inicializa escolhas quando grupos mudam
+  useEffect(() => {
+    setReconcileChoices(prev => {
+      const next: typeof prev = {};
+      duplicateGroups.forEach(g => {
+        next[g.key] = prev[g.key] || { keepId: g.clients[0].id, mergeFields: true };
+      });
+      return next;
+    });
+  }, [duplicateGroups]);
+
+  const runReconcile = async () => {
+    const ops: { keep: ClientRecord; remove: ClientRecord[]; merge: boolean }[] = [];
+    duplicateGroups.forEach(g => {
+      const choice = reconcileChoices[g.key];
+      if (!choice) return;
+      const keep = g.clients.find(c => c.id === choice.keepId);
+      if (!keep) return;
+      const remove = g.clients.filter(c => c.id !== choice.keepId);
+      if (remove.length === 0) return;
+      ops.push({ keep, remove, merge: choice.mergeFields });
+    });
+    const total = ops.reduce((s, o) => s + o.remove.length, 0);
+    setReconcileProgress({ done: 0, total, errors: [] });
+    const errors: string[] = [];
+    let done = 0;
+    for (const op of ops) {
+      // 1. Merge de campos em branco do keep a partir dos duplicates
+      if (op.merge) {
+        const merged: any = { ...op.keep };
+        const isEmpty = (v: any) => v === undefined || v === null || v === '' || v === 0;
+        op.remove.forEach(dup => {
+          Object.entries(dup).forEach(([k, v]) => {
+            if (k === 'id' || k === 'created_at' || k === 'updated_at' || k === 'company_name') return;
+            if (k === 'contact') {
+              merged.contact = { ...(dup.contact || {}), ...(merged.contact || {}) };
+              // prefere não-vazio
+              ['name', 'email', 'phone'].forEach(f => {
+                if (isEmpty(merged.contact[f]) && !isEmpty((dup.contact as any)?.[f])) merged.contact[f] = (dup.contact as any)[f];
+              });
+              return;
+            }
+            if (k === 'brands') {
+              merged.brands = merged.brands || {};
+              (['phant','leadbox','vivemus'] as const).forEach(bk => {
+                const mb = merged.brands[bk] || {};
+                const db = (dup.brands as any)?.[bk] || {};
+                merged.brands[bk] = { ...db, ...mb, active: mb.active || db.active };
+              });
+              return;
+            }
+            if (isEmpty(merged[k]) && !isEmpty(v)) merged[k] = v;
+          });
+        });
+        const upd = await SupabaseService.updateClient(op.keep.id, merged);
+        if (!upd.success) errors.push(`merge ${op.keep.company_name}: ${upd.message || 'erro'}`);
+      }
+      // 2. Deleta duplicatas
+      for (const dup of op.remove) {
+        const r = await SupabaseService.deleteClient(dup.id);
+        if (!r.success) errors.push(`${dup.company_name}: ${r.message || 'erro'}`);
+        done++;
+        setReconcileProgress({ done, total, errors });
+      }
+    }
+    await loadData();
   };
 
   const formDuplicate = useMemo(() => {
@@ -879,6 +1025,129 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
   );
 
   // ================================================================
+  // RECONCILE MODAL
+  // ================================================================
+  const renderReconcileModal = () => {
+    const totalToRemove = duplicateGroups.reduce((s, g) => {
+      const c = reconcileChoices[g.key];
+      return s + (c ? g.clients.length - 1 : 0);
+    }, 0);
+    const isRunning = reconcileProgress !== null && reconcileProgress.done < reconcileProgress.total;
+    const isDone = reconcileProgress !== null && reconcileProgress.done === reconcileProgress.total && reconcileProgress.total > 0;
+    return (
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-xl z-[100] flex items-start justify-center p-4 overflow-y-auto">
+        <div className="bg-white w-full max-w-5xl rounded-[32px] p-8 md:p-10 shadow-2xl relative my-6">
+          <button onClick={() => { setShowReconcileModal(false); setReconcileProgress(null); }} disabled={isRunning}
+            className="absolute top-6 right-6 w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center hover:bg-black hover:text-white transition-all disabled:opacity-40">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+          <h2 className="text-2xl font-black tracking-tighter text-gray-900 mb-2">Reconciliar Duplicatas</h2>
+          <p className="text-gray-400 text-sm font-medium mb-6">
+            {duplicateGroups.length} grupo(s) detectado(s). Selecione o cadastro <b>principal</b> (que será mantido) em cada grupo. Os demais serão <b>removidos</b>.
+          </p>
+
+          {duplicateGroups.length === 0 ? (
+            <div className="p-10 text-center">
+              <svg className="w-12 h-12 mx-auto text-emerald-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+              <span className="text-sm font-black text-gray-700 block">Sem duplicatas</span>
+              <span className="text-[10px] font-bold text-gray-400 block mt-1">Sua base está limpa.</span>
+            </div>
+          ) : (
+            <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-2">
+              {duplicateGroups.map(g => {
+                const choice = reconcileChoices[g.key] || { keepId: g.clients[0].id, mergeFields: true };
+                return (
+                  <div key={g.key} className="p-5 bg-amber-50/40 rounded-2xl border-2 border-amber-200">
+                    <div className="flex items-center justify-between mb-3">
+                      <div>
+                        <span className="inline-flex px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest bg-amber-200 text-amber-800">{g.reason}</span>
+                        <span className="text-[11px] font-bold text-gray-500 ml-2">{g.clients.length} cadastros</span>
+                      </div>
+                      <label className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-gray-600 cursor-pointer">
+                        <input type="checkbox" checked={choice.mergeFields}
+                          onChange={e => setReconcileChoices(prev => ({ ...prev, [g.key]: { ...choice, mergeFields: e.target.checked } }))}
+                          className="w-4 h-4 accent-black" />
+                        Mesclar campos vazios do principal
+                      </label>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                      {g.clients.map(c => {
+                        const isPrimary = choice.keepId === c.id;
+                        const filledScore = [c.cnpj, c.mrr, c.fee, c.contact?.email, c.contact?.phone, c.squad_name, c.industry, c.data_entrada, c.company_logo].filter(Boolean).length;
+                        return (
+                          <label key={c.id} className={`p-4 rounded-xl border-2 cursor-pointer transition-all ${isPrimary ? 'bg-white border-emerald-400 shadow-md' : 'bg-white/60 border-gray-200 hover:border-gray-400'}`}>
+                            <div className="flex items-start gap-3">
+                              <input type="radio" name={`keep-${g.key}`} checked={isPrimary}
+                                onChange={() => setReconcileChoices(prev => ({ ...prev, [g.key]: { ...choice, keepId: c.id } }))}
+                                className="mt-1 w-4 h-4 accent-emerald-500" />
+                              <div className="flex-1 min-w-0">
+                                <div className="flex items-center gap-2 mb-1">
+                                  <span className="font-black text-sm text-gray-900 truncate">{c.company_name}</span>
+                                  {isPrimary && <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-emerald-500 text-white">Manter</span>}
+                                </div>
+                                <div className="text-[10px] font-bold text-gray-400 space-y-0.5">
+                                  {c.cnpj && <div>CNPJ: <span className="font-mono text-gray-600">{c.cnpj}</span></div>}
+                                  {c.contact?.email && <div>{c.contact.email}</div>}
+                                  {c.contact?.phone && <div>{c.contact.phone}</div>}
+                                  <div>{c.industry || '-'} · {c.squad_name || 'sem squad'}</div>
+                                  <div>MRR {fmt(c.mrr || 0)} · Fee {fmt(c.fee || 0)}</div>
+                                  <div className="text-gray-300">{c.id.substring(0, 8)} · {filledScore} campos preenchidos · atualizado {fmtDate(c.updated_at)}</div>
+                                </div>
+                              </div>
+                            </div>
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {reconcileProgress && (
+            <div className="mt-5 p-4 bg-blue-50 rounded-xl border border-blue-100">
+              <div className="flex items-center justify-between mb-2">
+                <span className="text-[10px] font-black text-blue-700 uppercase tracking-widest">{isDone ? 'Concluído' : 'Reconciliando...'}</span>
+                <span className="text-[11px] font-black text-blue-900">{reconcileProgress.done} / {reconcileProgress.total}</span>
+              </div>
+              <div className="h-2 bg-blue-200 rounded-full overflow-hidden">
+                <div className="h-full bg-blue-600 transition-all" style={{ width: `${(reconcileProgress.done / Math.max(reconcileProgress.total, 1)) * 100}%` }} />
+              </div>
+              {reconcileProgress.errors.length > 0 && (
+                <div className="mt-2 text-[10px] font-bold text-red-600 max-h-[80px] overflow-y-auto">
+                  {reconcileProgress.errors.map((e, i) => <div key={i}>• {e}</div>)}
+                </div>
+              )}
+            </div>
+          )}
+
+          {duplicateGroups.length > 0 && (
+            <div className="mt-6 flex gap-3">
+              <button onClick={() => setShowReconcileModal(false)} disabled={isRunning}
+                className="flex-1 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] bg-gray-100 text-gray-500 hover:bg-gray-200 transition-all disabled:opacity-40">
+                Cancelar
+              </button>
+              {isDone ? (
+                <button onClick={() => { setShowReconcileModal(false); setReconcileProgress(null); }}
+                  className="flex-1 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] bg-emerald-500 text-white hover:bg-emerald-600 transition-all">
+                  Fechar
+                </button>
+              ) : (
+                <button onClick={() => { if (confirm(`Confirma remover ${totalToRemove} cadastro(s) duplicado(s)? Essa ação não pode ser desfeita.`)) runReconcile(); }}
+                  disabled={totalToRemove === 0 || isRunning}
+                  className="flex-1 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] bg-red-600 text-white hover:bg-red-700 transition-all disabled:opacity-40">
+                  {isRunning ? 'Processando...' : `Remover ${totalToRemove} duplicata(s)`}
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // ================================================================
   // IMPORT MODAL
   // ================================================================
   const renderImportModal = () => {
@@ -1188,6 +1457,15 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
     <div className="space-y-6 animate-in fade-in duration-500">
       <PageHeader title="Cadastro Geral" subtitle={`${filtered.length} de ${clients.length} clientes`}>
         <SearchBar value={searchTerm} onChange={setSearchTerm} />
+        {duplicateGroups.length > 0 && (
+          <button onClick={() => { setReconcileProgress(null); setShowReconcileModal(true); }}
+            className="relative px-5 py-2.5 bg-amber-50 border-2 border-amber-300 rounded-xl text-[10px] font-black uppercase tracking-widest text-amber-700 hover:bg-amber-500 hover:text-white hover:border-amber-500 transition-all">
+            Reconciliar Duplicatas
+            <span className="absolute -top-2 -right-2 min-w-[20px] h-5 px-1.5 bg-amber-500 text-white rounded-full text-[9px] font-black flex items-center justify-center">
+              {duplicateGroups.length}
+            </span>
+          </button>
+        )}
         <BtnSecondary onClick={() => { resetImport(); setShowImportModal(true); }}>Importar CSV/XLSX</BtnSecondary>
         <BtnPrimary onClick={newClient}>+ Novo</BtnPrimary>
       </PageHeader>
@@ -1258,7 +1536,7 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
               <th className={th}>Localização</th>
               <th className={th}>Indústria</th>
               <th className={th}>Func.</th>
-              <th className={th}>Fee</th>
+              <th className={`${th} text-center`}>Fee</th>
               <th className={th}>Modelo</th>
               <th className={th}>Squad</th>
               <th className={th}>Saúde</th>
@@ -1284,7 +1562,7 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
                 <td className={td}>{c.location || '-'}</td>
                 <td className={td}>{c.industry || '-'}</td>
                 <td className={`${td} text-center`}>{c.num_funcionarios || '-'}</td>
-                <td className={tdBold}>{c.fee ? fmt(c.fee) : '-'}</td>
+                <td className={`${tdBold} text-center`}>{c.fee ? fmt(c.fee) : '-'}</td>
                 <td className={td}>{c.contract_model || '-'}</td>
                 <td className={`${td} font-bold text-blue-600`}>{c.squad_name || '-'}</td>
                 <td className="px-4 py-3.5"><StatusBadge status={c.health_status || c.health} /></td>
@@ -1764,6 +2042,7 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
       {(showNewForm || isEditing) && renderForm()}
       {showPlanningForm && renderPlanForm()}
       {showImportModal && renderImportModal()}
+      {showReconcileModal && renderReconcileModal()}
     </div>
   );
 };
