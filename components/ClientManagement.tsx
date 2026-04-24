@@ -5,7 +5,14 @@ import { ClientRecord, ClientHealthBadge, ClientHealthStatus, ConsciousnessLevel
 import { SupabaseService } from '../services/api';
 
 type BrandKey = 'phant' | 'leadbox' | 'vivemus';
-type ImportRow = Omit<ClientRecord, 'id' | 'created_at' | 'updated_at'> & { __error?: string };
+type ImportRow = Omit<ClientRecord, 'id' | 'created_at' | 'updated_at'> & { __error?: string; __duplicate?: string };
+
+// Normalização para detecção de duplicidade
+const normName = (s?: string) => (s || '').toString().toLowerCase().trim()
+  .normalize('NFD').replace(/[̀-ͯ]/g, '')
+  .replace(/\b(ltda|me|eireli|s\.?a\.?|epp|mei)\b/gi, '')
+  .replace(/[^a-z0-9]+/g, '');
+const normCnpj = (s?: string) => (s || '').toString().replace(/\D/g, '');
 
 // ====== PROPS ======
 interface ClientManagementProps {
@@ -395,6 +402,38 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
     });
   }, [clients, searchTerm, brandFilter, statusFilter]);
 
+  // Índice de duplicidade (nome normalizado e CNPJ)
+  const dedupIndex = useMemo(() => {
+    const byName = new Map<string, ClientRecord>();
+    const byCnpj = new Map<string, ClientRecord>();
+    clients.forEach(c => {
+      const n = normName(c.company_name);
+      if (n) byName.set(n, c);
+      const cn = normCnpj(c.cnpj);
+      if (cn) byCnpj.set(cn, c);
+    });
+    return { byName, byCnpj };
+  }, [clients]);
+
+  const findDuplicate = (name?: string, cnpj?: string, excludeId?: string): ClientRecord | null => {
+    const cn = normCnpj(cnpj);
+    if (cn && cn.length >= 8) {
+      const hit = dedupIndex.byCnpj.get(cn);
+      if (hit && hit.id !== excludeId) return hit;
+    }
+    const n = normName(name);
+    if (n && n.length >= 3) {
+      const hit = dedupIndex.byName.get(n);
+      if (hit && hit.id !== excludeId) return hit;
+    }
+    return null;
+  };
+
+  const formDuplicate = useMemo(() => {
+    if (!showNewForm && !isEditing) return null;
+    return findDuplicate(editForm.company_name, editForm.cnpj, isEditing ? selectedClient?.id : undefined);
+  }, [editForm.company_name, editForm.cnpj, showNewForm, isEditing, selectedClient, dedupIndex]);
+
   const toggleBrandFilter = (key: BrandKey | 'none') => {
     setBrandFilter(prev => {
       const next = new Set(prev);
@@ -567,6 +606,26 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
     return { ...c, __error: err };
   };
 
+  // Aplica detecção de duplicatas contra o banco e entre as próprias linhas
+  const markDuplicates = (rows: ImportRow[]): ImportRow[] => {
+    const seenName = new Map<string, number>();
+    const seenCnpj = new Map<string, number>();
+    return rows.map((r, i) => {
+      if (r.__error) return r;
+      // contra o banco
+      const existing = findDuplicate(r.company_name, r.cnpj);
+      if (existing) return { ...r, __duplicate: `já cadastrado: ${existing.company_name}` };
+      // entre linhas da planilha
+      const nk = normName(r.company_name);
+      const ck = normCnpj(r.cnpj);
+      if (nk && seenName.has(nk)) return { ...r, __duplicate: `duplicata da linha ${seenName.get(nk)! + 1}` };
+      if (ck && ck.length >= 8 && seenCnpj.has(ck)) return { ...r, __duplicate: `CNPJ duplicado da linha ${seenCnpj.get(ck)! + 1}` };
+      if (nk) seenName.set(nk, i);
+      if (ck && ck.length >= 8) seenCnpj.set(ck, i);
+      return r;
+    });
+  };
+
   const onFilePicked = async (file: File) => {
     setImportProgress(null);
     try {
@@ -576,7 +635,7 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
       const json: Record<string, any>[] = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
       if (json.length === 0) { alert('Planilha vazia'); return; }
       const headers = Object.keys(json[0]);
-      const rows = json.map(rowToClient);
+      const rows = markDuplicates(json.map(rowToClient));
       setImportHeaders(headers);
       setImportRows(rows);
     } catch (err: any) {
@@ -585,11 +644,11 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
   };
 
   const runImport = async () => {
-    const valid = importRows.filter(r => !r.__error);
+    const valid = importRows.filter(r => !r.__error && !r.__duplicate);
     setImportProgress({ done: 0, total: valid.length, errors: [] });
     const errors: string[] = [];
     for (let i = 0; i < valid.length; i++) {
-      const { __error, ...payload } = valid[i];
+      const { __error, __duplicate, ...payload } = valid[i];
       const r = await SupabaseService.saveClient(payload as any);
       if (!r.success) errors.push(`${payload.company_name}: ${r.message || 'erro'}`);
       setImportProgress({ done: i + 1, total: valid.length, errors });
@@ -622,6 +681,20 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
         </button>
 
         <h2 className="text-2xl font-black tracking-tighter text-gray-900 mb-8">{isEditing ? 'Editar Cliente' : 'Novo Cliente'}</h2>
+
+        {formDuplicate && (
+          <div className="mb-6 p-4 bg-amber-50 border-2 border-amber-200 rounded-2xl flex items-start gap-3">
+            <svg className="w-5 h-5 text-amber-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/></svg>
+            <div className="flex-1">
+              <span className="text-[10px] font-black text-amber-700 uppercase tracking-widest block mb-1">Possível duplicidade</span>
+              <span className="text-[12px] font-bold text-amber-900 block">Já existe: <b>{formDuplicate.company_name}</b>{formDuplicate.cnpj ? ` · CNPJ ${formDuplicate.cnpj}` : ''}</span>
+              <button onClick={() => { setShowNewForm(false); setIsEditing(false); openDetail(formDuplicate); }}
+                className="mt-2 text-[10px] font-black text-amber-700 uppercase tracking-widest hover:text-amber-900 underline">
+                Abrir cliente existente &rarr;
+              </button>
+            </div>
+          </div>
+        )}
 
         <div className="space-y-7">
           {/* DADOS EMPRESA */}
@@ -750,13 +823,14 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
           {(() => {
             const noBrand = !editForm.brands?.phant?.active && !editForm.brands?.leadbox?.active && !editForm.brands?.vivemus?.active;
             const hasName = !!(editForm.company_name && editForm.company_name.trim());
-            const canSave = hasName && !noBrand && savingState !== 'saving';
+            const blockedByDup = !isEditing && !!formDuplicate;
+            const canSave = hasName && !noBrand && !blockedByDup && savingState !== 'saving';
             return (
               <button onClick={save} disabled={!canSave}
                 className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl transition-all ${
                   savingState === 'saved' ? 'bg-emerald-500 text-white' : savingState === 'saving' ? 'bg-gray-200 text-gray-400' : !canSave ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-black text-white hover:bg-brand'
                 }`}>
-                {savingState === 'saved' ? 'Salvo!' : savingState === 'saving' ? 'Salvando...' : !hasName ? 'Informe o nome da empresa' : noBrand ? 'Selecione a empresa do contrato' : isEditing ? 'Atualizar' : 'Cadastrar'}
+                {savingState === 'saved' ? 'Salvo!' : savingState === 'saving' ? 'Salvando...' : !hasName ? 'Informe o nome da empresa' : noBrand ? 'Selecione a empresa do contrato' : blockedByDup ? 'Cliente já cadastrado' : isEditing ? 'Atualizar' : 'Cadastrar'}
               </button>
             );
           })()}
@@ -808,8 +882,9 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
   // IMPORT MODAL
   // ================================================================
   const renderImportModal = () => {
-    const valid = importRows.filter(r => !r.__error);
     const invalid = importRows.filter(r => r.__error);
+    const duplicates = importRows.filter(r => !r.__error && r.__duplicate);
+    const valid = importRows.filter(r => !r.__error && !r.__duplicate);
     const isImporting = importProgress !== null && importProgress.done < importProgress.total;
     const isDone = importProgress !== null && importProgress.done === importProgress.total;
     return (
@@ -844,14 +919,18 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
 
           {importRows.length > 0 && (
             <div className="space-y-5">
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-4 gap-3">
                 <div className="p-4 bg-gray-50 rounded-2xl text-center">
                   <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest block">Total</span>
                   <span className="text-2xl font-black text-gray-900">{importRows.length}</span>
                 </div>
                 <div className="p-4 bg-emerald-50 rounded-2xl text-center">
-                  <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest block">Válidas</span>
+                  <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest block">Novas</span>
                   <span className="text-2xl font-black text-emerald-700">{valid.length}</span>
+                </div>
+                <div className="p-4 bg-amber-50 rounded-2xl text-center">
+                  <span className="text-[9px] font-black text-amber-600 uppercase tracking-widest block">Duplicadas</span>
+                  <span className="text-2xl font-black text-amber-700">{duplicates.length}</span>
                 </div>
                 <div className="p-4 bg-red-50 rounded-2xl text-center">
                   <span className="text-[9px] font-black text-red-600 uppercase tracking-widest block">Com erro</span>
@@ -879,8 +958,9 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
                   <tbody>
                     {importRows.slice(0, 100).map((r, i) => {
                       const brands = [r.brands?.phant?.active && 'Phant', r.brands?.leadbox?.active && 'Leadbox', r.brands?.vivemus?.active && 'Vivemus'].filter(Boolean).join(', ');
+                      const rowBg = r.__error ? 'bg-red-50/40' : r.__duplicate ? 'bg-amber-50/40' : '';
                       return (
-                        <tr key={i} className={`border-b border-gray-50 ${r.__error ? 'bg-red-50/40' : ''}`}>
+                        <tr key={i} className={`border-b border-gray-50 ${rowBg}`}>
                           <td className={`${td} text-gray-400`}>{i + 1}</td>
                           <td className={tdBold}>{r.company_name || '-'}</td>
                           <td className={td}>{brands || '-'}</td>
@@ -890,6 +970,8 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
                           <td className={td}>
                             {r.__error ? (
                               <span className="inline-flex px-2 py-0.5 rounded text-[8px] font-black bg-red-100 text-red-700" title={r.__error}>Erro</span>
+                            ) : r.__duplicate ? (
+                              <span className="inline-flex px-2 py-0.5 rounded text-[8px] font-black bg-amber-100 text-amber-700" title={r.__duplicate}>Duplicada</span>
                             ) : (
                               <span className="inline-flex px-2 py-0.5 rounded text-[8px] font-black bg-emerald-100 text-emerald-700">OK</span>
                             )}
@@ -908,6 +990,16 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
                   {invalid.slice(0, 10).map((r, i) => (
                     <div key={i} className="text-red-600"><b>{r.company_name || `linha ${importRows.indexOf(r) + 1}`}:</b> {r.__error}</div>
                   ))}
+                </div>
+              )}
+
+              {duplicates.length > 0 && (
+                <div className="p-3 bg-amber-50 rounded-xl border border-amber-200 text-[11px] space-y-1 max-h-[120px] overflow-y-auto">
+                  <span className="font-black text-amber-700 text-[10px] uppercase tracking-widest block mb-1">Duplicatas detectadas — serão ignoradas</span>
+                  {duplicates.slice(0, 10).map((r, i) => (
+                    <div key={i} className="text-amber-700"><b>{r.company_name}:</b> {r.__duplicate}</div>
+                  ))}
+                  {duplicates.length > 10 && <div className="text-amber-600 italic">... e mais {duplicates.length - 10}</div>}
                 </div>
               )}
 
