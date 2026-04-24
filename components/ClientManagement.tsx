@@ -314,6 +314,10 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
   const [showReconcileModal, setShowReconcileModal] = useState(false);
   const [reconcileChoices, setReconcileChoices] = useState<Record<string, { keepId: string; mergeFields: boolean }>>({});
   const [reconcileProgress, setReconcileProgress] = useState<{ done: number; total: number; errors: string[] } | null>(null);
+  const [manualGroups, setManualGroups] = useState<{ key: string; ids: string[] }[]>([]);
+  const [showPicker, setShowPicker] = useState(false);
+  const [pickerSelected, setPickerSelected] = useState<Set<string>>(new Set());
+  const [pickerSearch, setPickerSearch] = useState('');
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -489,7 +493,8 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
       .filter(([, arr]) => arr.length > 1)
       .map(([key, arr]) => ({
         key,
-        reason: key.startsWith('cnpj:') ? 'CNPJ idêntico' : 'Nome equivalente',
+        reason: (key.startsWith('cnpj:') ? 'CNPJ idêntico' : 'Nome equivalente') as string,
+        manual: false,
         clients: arr.sort((a, b) => {
           // Ordena por completude (mais campos preenchidos primeiro) e data
           const score = (c: ClientRecord) => {
@@ -507,20 +512,37 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
       }));
   }, [clients]);
 
+  // Combina grupos automáticos + manuais (dedup por ID — grupos manuais sobrepostos são ignorados)
+  const allGroups = useMemo(() => {
+    const byId = new Map<string, ClientRecord>();
+    clients.forEach(c => byId.set(c.id, c));
+    const autoIds = new Set<string>();
+    duplicateGroups.forEach(g => g.clients.forEach(c => autoIds.add(c.id)));
+    const manual = manualGroups
+      .map(mg => {
+        const arr = mg.ids.map(id => byId.get(id)).filter((x): x is ClientRecord => !!x);
+        // filtra IDs que já estão em grupo auto, pra evitar conflito
+        const filtered = arr.filter(c => !autoIds.has(c.id));
+        return { key: mg.key, reason: 'Marcado manualmente', manual: true as const, clients: filtered };
+      })
+      .filter(g => g.clients.length >= 2);
+    return [...duplicateGroups, ...manual];
+  }, [duplicateGroups, manualGroups, clients]);
+
   // Inicializa escolhas quando grupos mudam
   useEffect(() => {
     setReconcileChoices(prev => {
       const next: typeof prev = {};
-      duplicateGroups.forEach(g => {
+      allGroups.forEach(g => {
         next[g.key] = prev[g.key] || { keepId: g.clients[0].id, mergeFields: true };
       });
       return next;
     });
-  }, [duplicateGroups]);
+  }, [allGroups]);
 
   const runReconcile = async () => {
     const ops: { keep: ClientRecord; remove: ClientRecord[]; merge: boolean }[] = [];
-    duplicateGroups.forEach(g => {
+    allGroups.forEach(g => {
       const choice = reconcileChoices[g.key];
       if (!choice) return;
       const keep = g.clients.find(c => c.id === choice.keepId);
@@ -573,6 +595,21 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
       }
     }
     await loadData();
+    setManualGroups([]); // limpa grupos manuais após operação
+  };
+
+  const addManualGroup = () => {
+    if (pickerSelected.size < 2) return;
+    const ids = Array.from(pickerSelected);
+    const key = `manual-${Date.now()}`;
+    setManualGroups(prev => [...prev, { key, ids }]);
+    setPickerSelected(new Set());
+    setPickerSearch('');
+    setShowPicker(false);
+  };
+
+  const removeManualGroup = (key: string) => {
+    setManualGroups(prev => prev.filter(g => g.key !== key));
   };
 
   const formDuplicate = useMemo(() => {
@@ -1028,12 +1065,23 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
   // RECONCILE MODAL
   // ================================================================
   const renderReconcileModal = () => {
-    const totalToRemove = duplicateGroups.reduce((s, g) => {
+    const totalToRemove = allGroups.reduce((s, g) => {
       const c = reconcileChoices[g.key];
       return s + (c ? g.clients.length - 1 : 0);
     }, 0);
     const isRunning = reconcileProgress !== null && reconcileProgress.done < reconcileProgress.total;
     const isDone = reconcileProgress !== null && reconcileProgress.done === reconcileProgress.total && reconcileProgress.total > 0;
+    // IDs já em algum grupo (para não aparecerem no picker)
+    const usedIds = new Set<string>();
+    allGroups.forEach(g => g.clients.forEach(c => usedIds.add(c.id)));
+    const pickerList = clients
+      .filter(c => !usedIds.has(c.id))
+      .filter(c => {
+        const t = pickerSearch.trim().toLowerCase();
+        if (!t) return true;
+        return [c.company_name, c.cnpj, c.contact?.email, c.industry].filter(Boolean).join(' ').toLowerCase().includes(t);
+      })
+      .sort((a, b) => (a.company_name || '').localeCompare(b.company_name || ''));
     return (
       <div className="fixed inset-0 bg-black/80 backdrop-blur-xl z-[100] flex items-start justify-center p-4 overflow-y-auto">
         <div className="bg-white w-full max-w-5xl rounded-[32px] p-8 md:p-10 shadow-2xl relative my-6">
@@ -1041,27 +1089,85 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
             className="absolute top-6 right-6 w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center hover:bg-black hover:text-white transition-all disabled:opacity-40">
             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
           </button>
-          <h2 className="text-2xl font-black tracking-tighter text-gray-900 mb-2">Reconciliar Duplicatas</h2>
-          <p className="text-gray-400 text-sm font-medium mb-6">
-            {duplicateGroups.length} grupo(s) detectado(s). Selecione o cadastro <b>principal</b> (que será mantido) em cada grupo. Os demais serão <b>removidos</b>.
-          </p>
+          <div className="flex items-start justify-between mb-4 gap-4 flex-wrap">
+            <div>
+              <h2 className="text-2xl font-black tracking-tighter text-gray-900">Reconciliar Duplicatas</h2>
+              <p className="text-gray-400 text-sm font-medium mt-1">
+                {duplicateGroups.length} grupo(s) detectado(s){manualGroups.length > 0 ? ` + ${manualGroups.length} manual(is)` : ''}. Escolha o cadastro <b>principal</b> em cada grupo — os demais serão <b>removidos</b>.
+              </p>
+            </div>
+            <button onClick={() => { setPickerSelected(new Set()); setPickerSearch(''); setShowPicker(true); }}
+              disabled={isRunning}
+              className="px-4 py-2 bg-black text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-brand transition-all disabled:opacity-40 whitespace-nowrap">
+              + Marcar Grupo Manualmente
+            </button>
+          </div>
 
-          {duplicateGroups.length === 0 ? (
+          {showPicker && (
+            <div className="mb-6 p-5 bg-gray-50 rounded-2xl border-2 border-dashed border-gray-300 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-[10px] font-black text-gray-600 uppercase tracking-widest">Selecione 2 ou mais cadastros para marcar como duplicados</span>
+                <button onClick={() => setShowPicker(false)} className="text-[10px] font-black text-gray-400 hover:text-gray-700 uppercase tracking-widest">Fechar</button>
+              </div>
+              <input type="text" placeholder="Buscar por nome, CNPJ, e-mail..." value={pickerSearch} onChange={e => setPickerSearch(e.target.value)}
+                className="w-full px-4 py-2.5 bg-white rounded-xl font-bold text-sm outline-none border-2 border-transparent focus:border-black" />
+              <div className="max-h-[240px] overflow-y-auto bg-white rounded-xl border border-gray-100">
+                {pickerList.length === 0 && (
+                  <div className="py-8 text-center text-[10px] font-black text-gray-300 uppercase tracking-widest">Nenhum cliente disponível</div>
+                )}
+                {pickerList.map(c => {
+                  const isSel = pickerSelected.has(c.id);
+                  return (
+                    <label key={c.id} className={`flex items-center gap-3 px-4 py-2.5 border-b border-gray-50 cursor-pointer transition-colors ${isSel ? 'bg-emerald-50' : 'hover:bg-gray-50'}`}>
+                      <input type="checkbox" checked={isSel}
+                        onChange={() => setPickerSelected(prev => {
+                          const n = new Set(prev);
+                          if (n.has(c.id)) n.delete(c.id); else n.add(c.id);
+                          return n;
+                        })}
+                        className="w-4 h-4 accent-emerald-500" />
+                      <div className="flex-1 min-w-0">
+                        <div className="font-black text-[12px] text-gray-900 truncate">{c.company_name}</div>
+                        <div className="text-[10px] font-bold text-gray-400">
+                          {c.cnpj && <span className="font-mono mr-2">{c.cnpj}</span>}
+                          {c.contact?.email && <span className="mr-2">{c.contact.email}</span>}
+                          <span>{c.industry || '-'}</span>
+                        </div>
+                      </div>
+                    </label>
+                  );
+                })}
+              </div>
+              <div className="flex items-center justify-between">
+                <span className="text-[10px] font-black text-gray-500 uppercase tracking-widest">{pickerSelected.size} selecionado(s)</span>
+                <button onClick={addManualGroup} disabled={pickerSelected.size < 2}
+                  className="px-4 py-2 bg-emerald-500 text-white rounded-xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-600 transition-all disabled:opacity-40">
+                  Adicionar grupo
+                </button>
+              </div>
+            </div>
+          )}
+
+          {allGroups.length === 0 ? (
             <div className="p-10 text-center">
               <svg className="w-12 h-12 mx-auto text-emerald-400 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
               <span className="text-sm font-black text-gray-700 block">Sem duplicatas</span>
-              <span className="text-[10px] font-bold text-gray-400 block mt-1">Sua base está limpa.</span>
+              <span className="text-[10px] font-bold text-gray-400 block mt-1">Sua base está limpa. Use <b>Marcar Grupo Manualmente</b> se quiser mesclar cadastros manualmente.</span>
             </div>
           ) : (
-            <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-2">
-              {duplicateGroups.map(g => {
+            <div className="space-y-5 max-h-[55vh] overflow-y-auto pr-2">
+              {allGroups.map(g => {
                 const choice = reconcileChoices[g.key] || { keepId: g.clients[0].id, mergeFields: true };
                 return (
-                  <div key={g.key} className="p-5 bg-amber-50/40 rounded-2xl border-2 border-amber-200">
-                    <div className="flex items-center justify-between mb-3">
-                      <div>
-                        <span className="inline-flex px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest bg-amber-200 text-amber-800">{g.reason}</span>
-                        <span className="text-[11px] font-bold text-gray-500 ml-2">{g.clients.length} cadastros</span>
+                  <div key={g.key} className={`p-5 rounded-2xl border-2 ${g.manual ? 'bg-blue-50/40 border-blue-200' : 'bg-amber-50/40 border-amber-200'}`}>
+                    <div className="flex items-center justify-between mb-3 gap-3 flex-wrap">
+                      <div className="flex items-center gap-2">
+                        <span className={`inline-flex px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-widest ${g.manual ? 'bg-blue-200 text-blue-800' : 'bg-amber-200 text-amber-800'}`}>{g.reason}</span>
+                        <span className="text-[11px] font-bold text-gray-500">{g.clients.length} cadastros</span>
+                        {g.manual && (
+                          <button onClick={() => removeManualGroup(g.key)} disabled={isRunning}
+                            className="ml-2 text-[9px] font-black text-red-400 hover:text-red-600 uppercase tracking-widest">Remover grupo</button>
+                        )}
                       </div>
                       <label className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-gray-600 cursor-pointer">
                         <input type="checkbox" checked={choice.mergeFields}
@@ -1122,7 +1228,7 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
             </div>
           )}
 
-          {duplicateGroups.length > 0 && (
+          {allGroups.length > 0 && (
             <div className="mt-6 flex gap-3">
               <button onClick={() => setShowReconcileModal(false)} disabled={isRunning}
                 className="flex-1 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] bg-gray-100 text-gray-500 hover:bg-gray-200 transition-all disabled:opacity-40">
@@ -1457,15 +1563,19 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
     <div className="space-y-6 animate-in fade-in duration-500">
       <PageHeader title="Cadastro Geral" subtitle={`${filtered.length} de ${clients.length} clientes`}>
         <SearchBar value={searchTerm} onChange={setSearchTerm} />
-        {duplicateGroups.length > 0 && (
-          <button onClick={() => { setReconcileProgress(null); setShowReconcileModal(true); }}
-            className="relative px-5 py-2.5 bg-amber-50 border-2 border-amber-300 rounded-xl text-[10px] font-black uppercase tracking-widest text-amber-700 hover:bg-amber-500 hover:text-white hover:border-amber-500 transition-all">
-            Reconciliar Duplicatas
+        <button onClick={() => { setReconcileProgress(null); setShowReconcileModal(true); }}
+          className={`relative px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all border-2 ${
+            duplicateGroups.length > 0
+              ? 'bg-amber-50 border-amber-300 text-amber-700 hover:bg-amber-500 hover:text-white hover:border-amber-500'
+              : 'bg-white border-gray-200 text-gray-500 hover:bg-black hover:text-white hover:border-black'
+          }`}>
+          Reconciliar Duplicatas
+          {duplicateGroups.length > 0 && (
             <span className="absolute -top-2 -right-2 min-w-[20px] h-5 px-1.5 bg-amber-500 text-white rounded-full text-[9px] font-black flex items-center justify-center">
               {duplicateGroups.length}
             </span>
-          </button>
-        )}
+          )}
+        </button>
         <BtnSecondary onClick={() => { resetImport(); setShowImportModal(true); }}>Importar CSV/XLSX</BtnSecondary>
         <BtnPrimary onClick={newClient}>+ Novo</BtnPrimary>
       </PageHeader>
