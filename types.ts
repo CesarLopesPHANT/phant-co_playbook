@@ -172,6 +172,7 @@ export interface CadastroWithStats extends CadastroRecord {
   valor_total: number;
   valor_aprovado: number;
   ultima_proposta?: string;
+  _source?: 'cadastro' | 'clients';
 }
 
 export const formatCurrency = (val: number) =>

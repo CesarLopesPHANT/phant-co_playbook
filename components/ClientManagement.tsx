@@ -1,7 +1,11 @@
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
+import * as XLSX from 'xlsx';
 import { ClientRecord, ClientHealthBadge, ClientHealthStatus, ConsciousnessLevel, UserRole, PlanningItem, PlanningStatus, RiskRating, AppCustomization } from '../types';
 import { SupabaseService } from '../services/api';
+
+type BrandKey = 'phant' | 'leadbox' | 'vivemus';
+type ImportRow = Omit<ClientRecord, 'id' | 'created_at' | 'updated_at'> & { __error?: string };
 
 // ====== PROPS ======
 interface ClientManagementProps {
@@ -76,9 +80,16 @@ const RISK_COLORS: Record<string, string> = {
 };
 
 // ====== HELPERS ======
-const fmt = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val);
+const fmt = (val: number) => new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(val || 0);
 const fmtDate = (d?: string) => { if (!d) return '-'; try { return new Date(d).toLocaleDateString('pt-BR'); } catch { return d; } };
-const daysBetween = (d: string) => { if (!d) return 0; return Math.ceil((new Date(d).getTime() - Date.now()) / 864e5); };
+const daysBetween = (d?: string) => { if (!d) return 0; return Math.ceil((new Date(d).getTime() - Date.now()) / 864e5); };
+
+const MONTH_ORDER = ['janeiro','fevereiro','marco','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
+const monthIndex = (s: string) => {
+  const norm = (s || '').toLowerCase().trim();
+  const idx = MONTH_ORDER.findIndex(m => norm.startsWith(m));
+  return idx === -1 ? 99 : idx;
+};
 
 // ====== MICRO COMPONENTS ======
 // ====== BRAND LOGO URLs (fallback — sobrescrito pela config em Configurações > Clientes > Marcas) ======
@@ -286,6 +297,13 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
   const [editingPlanning, setEditingPlanning] = useState<PlanningItem | null>(null);
   const [planningForm, setPlanningForm] = useState<any>(EMPTY_PLANNING);
   const [savingState, setSavingState] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [brandFilter, setBrandFilter] = useState<Set<BrandKey | 'none'>>(new Set());
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'churned' | 'inactive'>('all');
+  const [showImportModal, setShowImportModal] = useState(false);
+  const [importRows, setImportRows] = useState<ImportRow[]>([]);
+  const [importHeaders, setImportHeaders] = useState<string[]>([]);
+  const [importProgress, setImportProgress] = useState<{ done: number; total: number; errors: string[] } | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -297,7 +315,21 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
   }, []);
 
   useEffect(() => { loadData(); }, [loadData]);
-  useEffect(() => { if (view !== 'detail') setView(initialView); }, [initialView]);
+  useEffect(() => { if (view !== 'detail') setView(initialView); }, [initialView]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // ESC fecha modais
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Escape') return;
+      if (showNewForm || isEditing) { setShowNewForm(false); setIsEditing(false); }
+      if (showPlanningForm) { setShowPlanningForm(false); setEditingPlanning(null); setPlanningForm(EMPTY_PLANNING); }
+      if (showImportModal && !(importProgress && importProgress.done < importProgress.total)) {
+        setShowImportModal(false); resetImport();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showNewForm, isEditing, showPlanningForm, showImportModal, importProgress]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // ====== METRICS ======
   const metrics = useMemo(() => {
@@ -308,7 +340,12 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
     const safe = active.filter(c => c.health === 'safe');
     const churn = clients.filter(c => c.health_status === 'churn' || c.status === 'churned');
     const impl = clients.filter(c => c.health_status === 'implementacao');
-    const silent = active.filter(c => { if (!c.last_report_date) return true; return daysBetween(c.last_report_date) < -30; });
+    const silent = active.filter(c => {
+      // grace period: clientes que entraram há menos de 30 dias não disparam alerta
+      if (c.data_entrada && daysBetween(c.data_entrada) > -30) return false;
+      if (!c.last_report_date) return true;
+      return daysBetween(c.last_report_date) < -30;
+    });
     const lts = active.filter(c => c.lt);
     const avgLT = lts.length > 0 ? lts.reduce((s, c) => s + (c.lt || 0), 0) / lts.length : 0;
     const mrrBySquad: Record<string, number> = {};
@@ -327,22 +364,58 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
   }, [clients]);
 
   const filtered = useMemo(() => {
-    if (!searchTerm.trim()) return clients;
-    const t = searchTerm.toLowerCase();
-    return clients.filter(c =>
-      c.company_name.toLowerCase().includes(t) || c.contact?.name?.toLowerCase().includes(t) ||
-      c.industry?.toLowerCase().includes(t) || c.squad_name?.toLowerCase().includes(t)
-    );
-  }, [clients, searchTerm]);
+    const t = searchTerm.trim().toLowerCase();
+    return clients.filter(c => {
+      // filtro de status do contrato
+      if (statusFilter !== 'all') {
+        const s = c.status || 'active';
+        if (statusFilter === 'active' && s !== 'active') return false;
+        if (statusFilter === 'churned' && s !== 'churned') return false;
+        if (statusFilter === 'inactive' && s !== 'inactive') return false;
+      }
+      // filtro por marca (união — OR entre marcas selecionadas)
+      if (brandFilter.size > 0) {
+        const hasNone = !c.brands?.phant?.active && !c.brands?.leadbox?.active && !c.brands?.vivemus?.active;
+        const matches =
+          (brandFilter.has('phant') && c.brands?.phant?.active) ||
+          (brandFilter.has('leadbox') && c.brands?.leadbox?.active) ||
+          (brandFilter.has('vivemus') && c.brands?.vivemus?.active) ||
+          (brandFilter.has('none') && hasNone);
+        if (!matches) return false;
+      }
+      // busca textual
+      if (t) {
+        const haystack = [
+          c.company_name, c.contact?.name, c.contact?.email, c.contact?.phone,
+          c.industry, c.squad_name, c.location, c.cnpj, c.website,
+        ].filter(Boolean).join(' ').toLowerCase();
+        if (!haystack.includes(t)) return false;
+      }
+      return true;
+    });
+  }, [clients, searchTerm, brandFilter, statusFilter]);
+
+  const toggleBrandFilter = (key: BrandKey | 'none') => {
+    setBrandFilter(prev => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key); else next.add(key);
+      return next;
+    });
+  };
 
   const backlogData = useMemo(() => {
     const m: Record<string, { mrr: number; ot: number; v: number }> = {};
-    planning.forEach(p => {
+    // exclui recusados do backlog de receita projetada
+    planning.filter(p => p.status !== 'recusado').forEach(p => {
       const k = p.previsao_entrada || 'Sem data';
       if (!m[k]) m[k] = { mrr: 0, ot: 0, v: 0 };
       m[k].mrr += p.mrr_value || 0; m[k].ot += p.one_time_value || 0; m[k].v += p.variavel_value || 0;
     });
-    return Object.entries(m).sort(([a], [b]) => a.localeCompare(b));
+    return Object.entries(m).sort(([a], [b]) => {
+      const ia = monthIndex(a), ib = monthIndex(b);
+      if (ia !== ib) return ia - ib;
+      return a.localeCompare(b, 'pt-BR');
+    });
   }, [planning]);
 
   // ====== HANDLERS ======
@@ -385,6 +458,149 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
   const openDetail = (c: ClientRecord) => { setSelectedClient(c); setView('detail'); };
   const startEdit = () => { if (selectedClient) { setEditForm({ ...selectedClient }); setIsEditing(true); } };
   const newClient = () => { setEditForm({ ...EMPTY_CLIENT }); setShowNewForm(true); };
+
+  // ====== IMPORT CSV / XLSX ======
+  const normalizeHeader = (h: string) => (h || '')
+    .toString().toLowerCase().trim()
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
+
+  // map de cabeçalhos aceitos → campo
+  const HEADER_MAP: Record<string, string> = {
+    empresa: 'company_name', nome_empresa: 'company_name', company_name: 'company_name', nome: 'company_name', razao_social: 'company_name',
+    industria: 'industry', segmento: 'industry', setor: 'industry', industry: 'industry',
+    localizacao: 'location', cidade: 'location', location: 'location',
+    website: 'website', site: 'website',
+    instagram: 'instagram',
+    cnpj: 'cnpj',
+    contato: 'contact_name', contato_nome: 'contact_name', nome_contato: 'contact_name', responsavel: 'contact_name',
+    email: 'contact_email', e_mail: 'contact_email', contato_email: 'contact_email',
+    telefone: 'contact_phone', celular: 'contact_phone', whatsapp: 'contact_phone', contato_telefone: 'contact_phone',
+    mrr: 'mrr', mensalidade: 'mrr',
+    fee: 'fee', setup: 'fee',
+    squad: 'squad_name', squad_name: 'squad_name', time: 'squad_name',
+    modelo: 'contract_model', contract_model: 'contract_model', modelo_contrato: 'contract_model',
+    marca: 'brand', marcas: 'brand', empresa_contrato: 'brand', brand: 'brand',
+    data_entrada: 'data_entrada', entrada: 'data_entrada',
+    onboarding: 'data_onboarding', data_onboarding: 'data_onboarding',
+    assinatura: 'assinatura_date', data_assinatura: 'assinatura_date',
+    forma_pagamento: 'forma_pagamento', pagamento: 'forma_pagamento',
+    ano_fundacao: 'ano_fundacao', fundacao: 'ano_fundacao',
+    num_funcionarios: 'num_funcionarios', funcionarios: 'num_funcionarios',
+    observacoes: 'notes', notes: 'notes', obs: 'notes',
+    nps: 'nps', lt: 'lt',
+    status: 'status',
+    health_status: 'health_status', saude: 'health_status',
+  };
+
+  const parseBrands = (val: string): ClientRecord['brands'] => {
+    const brands = { phant: { active: false, mrr: 0, is_planning: false }, leadbox: { active: false, has_propagation: false }, vivemus: { active: false, has_consulting: false } };
+    const v = (val || '').toLowerCase();
+    if (/phant/.test(v)) brands.phant.active = true;
+    if (/lead.?box/.test(v)) brands.leadbox.active = true;
+    if (/vivemus/.test(v)) brands.vivemus.active = true;
+    return brands;
+  };
+
+  const parseDateBR = (val: string): string => {
+    if (!val) return '';
+    const s = val.toString().trim();
+    // dd/mm/yyyy → yyyy-mm-dd
+    const m = s.match(/^(\d{1,2})\/(\d{1,2})\/(\d{2,4})$/);
+    if (m) {
+      const yyyy = m[3].length === 2 ? `20${m[3]}` : m[3];
+      return `${yyyy}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+    }
+    // yyyy-mm-dd já aceito
+    if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.substring(0, 10);
+    // Excel serial number
+    if (/^\d+$/.test(s)) {
+      const excelDate = XLSX.SSF.parse_date_code(Number(s));
+      if (excelDate) return `${excelDate.y}-${String(excelDate.m).padStart(2, '0')}-${String(excelDate.d).padStart(2, '0')}`;
+    }
+    return s;
+  };
+
+  const parseNumber = (val: any): number => {
+    if (val === null || val === undefined || val === '') return 0;
+    if (typeof val === 'number') return val;
+    const clean = String(val).replace(/[R$\s]/g, '').replace(/\./g, '').replace(',', '.');
+    const n = Number(clean);
+    return isNaN(n) ? 0 : n;
+  };
+
+  const rowToClient = (raw: Record<string, any>): ImportRow => {
+    const c: any = { ...EMPTY_CLIENT, contact: { name: '', email: '', phone: '' } };
+    let brandSet = false;
+    Object.entries(raw).forEach(([k, v]) => {
+      const field = HEADER_MAP[normalizeHeader(k)];
+      if (!field || v === null || v === undefined || v === '') return;
+      const sv = v.toString().trim();
+      switch (field) {
+        case 'contact_name': c.contact.name = sv; break;
+        case 'contact_email': c.contact.email = sv; break;
+        case 'contact_phone': c.contact.phone = sv; break;
+        case 'mrr': c.mrr = parseNumber(v); break;
+        case 'fee': c.fee = parseNumber(v); break;
+        case 'nps': c.nps = parseNumber(v); break;
+        case 'lt': c.lt = parseNumber(v); break;
+        case 'brand': c.brands = parseBrands(sv); brandSet = true; break;
+        case 'data_entrada': case 'data_onboarding': case 'assinatura_date':
+          c[field] = parseDateBR(sv); break;
+        case 'status': {
+          const s = sv.toLowerCase();
+          c.status = s.includes('churn') ? 'churned' : s.includes('inativ') ? 'inactive' : 'active';
+          break;
+        }
+        case 'health_status': {
+          const s = sv.toLowerCase();
+          c.health_status = s.includes('safe') ? 'safe' : s.includes('danger') ? 'danger' : s.includes('churn') ? 'churn' : s.includes('impl') ? 'implementacao' : 'care';
+          break;
+        }
+        default: c[field] = sv;
+      }
+    });
+    // valida
+    let err: string | undefined;
+    if (!c.company_name) err = 'Nome da empresa obrigatório';
+    else if (!brandSet) err = 'Marca não detectada (coluna "marca": phant/leadbox/vivemus)';
+    return { ...c, __error: err };
+  };
+
+  const onFilePicked = async (file: File) => {
+    setImportProgress(null);
+    try {
+      const buf = await file.arrayBuffer();
+      const wb = XLSX.read(buf, { type: 'array', cellDates: false });
+      const ws = wb.Sheets[wb.SheetNames[0]];
+      const json: Record<string, any>[] = XLSX.utils.sheet_to_json(ws, { defval: '', raw: false });
+      if (json.length === 0) { alert('Planilha vazia'); return; }
+      const headers = Object.keys(json[0]);
+      const rows = json.map(rowToClient);
+      setImportHeaders(headers);
+      setImportRows(rows);
+    } catch (err: any) {
+      alert('Erro ao ler arquivo: ' + err.message);
+    }
+  };
+
+  const runImport = async () => {
+    const valid = importRows.filter(r => !r.__error);
+    setImportProgress({ done: 0, total: valid.length, errors: [] });
+    const errors: string[] = [];
+    for (let i = 0; i < valid.length; i++) {
+      const { __error, ...payload } = valid[i];
+      const r = await SupabaseService.saveClient(payload as any);
+      if (!r.success) errors.push(`${payload.company_name}: ${r.message || 'erro'}`);
+      setImportProgress({ done: i + 1, total: valid.length, errors });
+    }
+    await loadData();
+  };
+
+  const resetImport = () => {
+    setImportRows([]); setImportHeaders([]); setImportProgress(null);
+    if (fileInputRef.current) fileInputRef.current.value = '';
+  };
 
   // ====== LOADING ======
   if (isLoading) return (
@@ -440,10 +656,10 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
               const noBrand = !editForm.brands?.phant?.active && !editForm.brands?.leadbox?.active && !editForm.brands?.vivemus?.active;
               return (
                 <div className="space-y-2">
-                  <label className={`text-[10px] font-black uppercase tracking-widest ml-1 ${noBrand && !isEditing ? 'text-red-500 animate-pulse' : 'text-gray-400'}`}>
-                    {noBrand && !isEditing ? 'Selecione a empresa do contrato *' : 'Empresa do Contrato'}
+                  <label className={`text-[10px] font-black uppercase tracking-widest ml-1 ${noBrand ? 'text-red-500 animate-pulse' : 'text-gray-400'}`}>
+                    {noBrand ? 'Selecione a empresa do contrato *' : 'Empresa do Contrato'}
                   </label>
-                  <div className={`flex flex-wrap gap-3 p-3 rounded-2xl transition-all ${noBrand && !isEditing ? 'bg-red-50/50 border-2 border-dashed border-red-200' : 'bg-transparent'}`}>
+                  <div className={`flex flex-wrap gap-3 p-3 rounded-2xl transition-all ${noBrand ? 'bg-red-50/50 border-2 border-dashed border-red-200' : 'bg-transparent'}`}>
                     {[
                       { key: 'phant' as const, label: 'Phant', bg: 'bg-purple-50', border: 'border-purple-200', activeBg: 'bg-purple-600', letter: 'P' },
                       { key: 'leadbox' as const, label: 'Leadbox', bg: 'bg-blue-50', border: 'border-blue-200', activeBg: 'bg-blue-600', letter: 'L' },
@@ -480,7 +696,9 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
               <SelectField value={editForm.squad_name || ''} onChange={v => setEditForm({ ...editForm, squad_name: v })} options={dynamicSquadOptions.map(s => ({ value: s, label: s }))} placeholder="Squad" />
               <SelectField value={editForm.health_status || 'care'} onChange={v => {
                 const healthMap: Record<string, ClientHealthBadge> = { safe: 'safe', care: 'care', danger: 'danger', churn: 'danger', implementacao: 'care' };
-                setEditForm({ ...editForm, health_status: v, health: healthMap[v] || 'care' });
+                // Sincroniza status do contrato com health_status de churn
+                const nextStatus = v === 'churn' ? 'churned' : (editForm.status === 'churned' ? 'active' : editForm.status || 'active');
+                setEditForm({ ...editForm, health_status: v, health: healthMap[v] || 'care', status: nextStatus });
               }} options={[
                 { value: 'safe', label: 'Safe' }, { value: 'care', label: 'Care' }, { value: 'danger', label: 'Danger' },
                 { value: 'churn', label: 'Churn' }, { value: 'implementacao', label: 'Implementação' }
@@ -531,13 +749,14 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
 
           {(() => {
             const noBrand = !editForm.brands?.phant?.active && !editForm.brands?.leadbox?.active && !editForm.brands?.vivemus?.active;
-            const canSave = editForm.company_name && (!noBrand || isEditing) && savingState !== 'saving';
+            const hasName = !!(editForm.company_name && editForm.company_name.trim());
+            const canSave = hasName && !noBrand && savingState !== 'saving';
             return (
               <button onClick={save} disabled={!canSave}
                 className={`w-full py-4 rounded-2xl font-black text-xs uppercase tracking-[0.2em] shadow-xl transition-all ${
                   savingState === 'saved' ? 'bg-emerald-500 text-white' : savingState === 'saving' ? 'bg-gray-200 text-gray-400' : !canSave ? 'bg-gray-200 text-gray-400 cursor-not-allowed' : 'bg-black text-white hover:bg-brand'
                 }`}>
-                {savingState === 'saved' ? 'Salvo!' : savingState === 'saving' ? 'Salvando...' : noBrand && !isEditing ? 'Selecione a empresa do contrato' : isEditing ? 'Atualizar' : 'Cadastrar'}
+                {savingState === 'saved' ? 'Salvo!' : savingState === 'saving' ? 'Salvando...' : !hasName ? 'Informe o nome da empresa' : noBrand ? 'Selecione a empresa do contrato' : isEditing ? 'Atualizar' : 'Cadastrar'}
               </button>
             );
           })()}
@@ -586,6 +805,154 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
   );
 
   // ================================================================
+  // IMPORT MODAL
+  // ================================================================
+  const renderImportModal = () => {
+    const valid = importRows.filter(r => !r.__error);
+    const invalid = importRows.filter(r => r.__error);
+    const isImporting = importProgress !== null && importProgress.done < importProgress.total;
+    const isDone = importProgress !== null && importProgress.done === importProgress.total;
+    return (
+      <div className="fixed inset-0 bg-black/80 backdrop-blur-xl z-[100] flex items-start justify-center p-4 overflow-y-auto">
+        <div className="bg-white w-full max-w-4xl rounded-[32px] p-8 md:p-10 shadow-2xl relative my-6">
+          <button onClick={() => { setShowImportModal(false); resetImport(); }}
+            className="absolute top-6 right-6 w-9 h-9 bg-gray-100 rounded-full flex items-center justify-center hover:bg-black hover:text-white transition-all">
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M6 18L18 6M6 6l12 12"/></svg>
+          </button>
+          <h2 className="text-2xl font-black tracking-tighter text-gray-900 mb-2">Importar Clientes</h2>
+          <p className="text-gray-400 text-sm font-medium mb-6">Suporta <b>CSV</b>, <b>XLSX</b> e <b>XLS</b>. A primeira linha deve conter os cabeçalhos.</p>
+
+          {importRows.length === 0 && (
+            <>
+              <label htmlFor="import-file-input" className="block p-10 border-2 border-dashed border-gray-200 rounded-2xl text-center cursor-pointer hover:border-black hover:bg-gray-50 transition-all">
+                <svg className="w-10 h-10 mx-auto text-gray-300 mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 0115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12"/></svg>
+                <span className="text-sm font-black text-gray-700 block">Clique para selecionar um arquivo</span>
+                <span className="text-[10px] font-bold text-gray-400 block mt-1">ou arraste aqui</span>
+              </label>
+              <input id="import-file-input" ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls"
+                onChange={e => { const f = e.target.files?.[0]; if (f) onFilePicked(f); }}
+                className="hidden" />
+
+              <div className="mt-6 p-4 bg-gray-50 rounded-2xl text-[11px] font-medium text-gray-600 space-y-2">
+                <div className="font-black text-gray-700 text-[10px] uppercase tracking-widest mb-1">Colunas aceitas (qualquer ordem)</div>
+                <div><b>Obrigatórias:</b> <code>empresa</code>, <code>marca</code> (phant, leadbox ou vivemus)</div>
+                <div><b>Opcionais:</b> <code>industria</code>, <code>localizacao</code>, <code>cnpj</code>, <code>contato</code>, <code>email</code>, <code>telefone</code>, <code>mrr</code>, <code>fee</code>, <code>squad</code>, <code>modelo</code>, <code>data_entrada</code>, <code>onboarding</code>, <code>assinatura</code>, <code>forma_pagamento</code>, <code>website</code>, <code>status</code>, <code>observacoes</code></div>
+                <div className="text-gray-400">Datas aceitas: <code>dd/mm/yyyy</code> ou <code>yyyy-mm-dd</code>. Valores em R$ aceitos com pontos/vírgulas.</div>
+              </div>
+            </>
+          )}
+
+          {importRows.length > 0 && (
+            <div className="space-y-5">
+              <div className="grid grid-cols-3 gap-3">
+                <div className="p-4 bg-gray-50 rounded-2xl text-center">
+                  <span className="text-[9px] font-black text-gray-400 uppercase tracking-widest block">Total</span>
+                  <span className="text-2xl font-black text-gray-900">{importRows.length}</span>
+                </div>
+                <div className="p-4 bg-emerald-50 rounded-2xl text-center">
+                  <span className="text-[9px] font-black text-emerald-600 uppercase tracking-widest block">Válidas</span>
+                  <span className="text-2xl font-black text-emerald-700">{valid.length}</span>
+                </div>
+                <div className="p-4 bg-red-50 rounded-2xl text-center">
+                  <span className="text-[9px] font-black text-red-600 uppercase tracking-widest block">Com erro</span>
+                  <span className="text-2xl font-black text-red-700">{invalid.length}</span>
+                </div>
+              </div>
+
+              <div className="p-3 bg-gray-50 rounded-xl text-[10px] font-bold text-gray-500">
+                <b>Colunas detectadas:</b> {importHeaders.join(', ')}
+              </div>
+
+              <div className="overflow-x-auto rounded-2xl border border-gray-100 max-h-[360px] overflow-y-auto">
+                <table className="w-full text-left text-[11px]">
+                  <thead className="sticky top-0 bg-gray-50">
+                    <tr>
+                      <th className={th}>#</th>
+                      <th className={th}>Empresa</th>
+                      <th className={th}>Marca</th>
+                      <th className={th}>Contato</th>
+                      <th className={th}>E-mail</th>
+                      <th className={`${th} text-right`}>MRR</th>
+                      <th className={th}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {importRows.slice(0, 100).map((r, i) => {
+                      const brands = [r.brands?.phant?.active && 'Phant', r.brands?.leadbox?.active && 'Leadbox', r.brands?.vivemus?.active && 'Vivemus'].filter(Boolean).join(', ');
+                      return (
+                        <tr key={i} className={`border-b border-gray-50 ${r.__error ? 'bg-red-50/40' : ''}`}>
+                          <td className={`${td} text-gray-400`}>{i + 1}</td>
+                          <td className={tdBold}>{r.company_name || '-'}</td>
+                          <td className={td}>{brands || '-'}</td>
+                          <td className={td}>{r.contact?.name || '-'}</td>
+                          <td className={td}>{r.contact?.email || '-'}</td>
+                          <td className={`${tdBold} text-right`}>{r.mrr ? fmt(r.mrr) : '-'}</td>
+                          <td className={td}>
+                            {r.__error ? (
+                              <span className="inline-flex px-2 py-0.5 rounded text-[8px] font-black bg-red-100 text-red-700" title={r.__error}>Erro</span>
+                            ) : (
+                              <span className="inline-flex px-2 py-0.5 rounded text-[8px] font-black bg-emerald-100 text-emerald-700">OK</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+                {importRows.length > 100 && <div className="py-2 text-center text-[10px] font-bold text-gray-400">... e mais {importRows.length - 100} linha(s)</div>}
+              </div>
+
+              {invalid.length > 0 && (
+                <div className="p-3 bg-red-50 rounded-xl border border-red-100 text-[11px] space-y-1 max-h-[120px] overflow-y-auto">
+                  <span className="font-black text-red-700 text-[10px] uppercase tracking-widest block mb-1">Linhas inválidas serão ignoradas</span>
+                  {invalid.slice(0, 10).map((r, i) => (
+                    <div key={i} className="text-red-600"><b>{r.company_name || `linha ${importRows.indexOf(r) + 1}`}:</b> {r.__error}</div>
+                  ))}
+                </div>
+              )}
+
+              {importProgress && (
+                <div className="p-4 bg-blue-50 rounded-xl border border-blue-100">
+                  <div className="flex items-center justify-between mb-2">
+                    <span className="text-[10px] font-black text-blue-700 uppercase tracking-widest">{isDone ? 'Concluído' : 'Importando...'}</span>
+                    <span className="text-[11px] font-black text-blue-900">{importProgress.done} / {importProgress.total}</span>
+                  </div>
+                  <div className="h-2 bg-blue-200 rounded-full overflow-hidden">
+                    <div className="h-full bg-blue-600 transition-all" style={{ width: `${(importProgress.done / Math.max(importProgress.total, 1)) * 100}%` }} />
+                  </div>
+                  {importProgress.errors.length > 0 && (
+                    <div className="mt-2 text-[10px] font-bold text-red-600 max-h-[80px] overflow-y-auto">
+                      {importProgress.errors.map((e, i) => <div key={i}>• {e}</div>)}
+                    </div>
+                  )}
+                </div>
+              )}
+
+              <div className="flex gap-3">
+                <button onClick={resetImport} disabled={isImporting}
+                  className="flex-1 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] bg-gray-100 text-gray-500 hover:bg-gray-200 transition-all disabled:opacity-40">
+                  Trocar arquivo
+                </button>
+                {isDone ? (
+                  <button onClick={() => { setShowImportModal(false); resetImport(); }}
+                    className="flex-1 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] bg-emerald-500 text-white hover:bg-emerald-600 transition-all">
+                    Fechar
+                  </button>
+                ) : (
+                  <button onClick={runImport} disabled={valid.length === 0 || isImporting}
+                    className="flex-1 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] bg-black text-white hover:bg-brand transition-all disabled:opacity-40">
+                    {isImporting ? 'Importando...' : `Importar ${valid.length} cliente(s)`}
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  };
+
+  // ================================================================
   // PAGE: DASHBOARD
   // ================================================================
   const renderDashboard = () => (
@@ -594,14 +961,25 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
         <BtnPrimary onClick={newClient}>+ Novo Cliente</BtnPrimary>
       </PageHeader>
 
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+      <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
         <KpiCard label="MRR Total Ativo" value={fmt(metrics.totalMRR)} />
         <KpiCard label="Clientes Ativos" value={metrics.active.length} />
         <KpiCard label="LT Médio" value={metrics.avgLT.toFixed(1)} />
-        {Object.entries(metrics.mrrBySquad).slice(0, 2).map(([sq, mrr]) => (
-          <KpiCard key={sq} label={`MRR ${sq}`} value={fmt(mrr as number)} />
-        ))}
       </div>
+
+      {/* MRR por Squad — todos */}
+      {Object.keys(metrics.mrrBySquad).length > 0 && (
+        <div className="space-y-3">
+          <SectionTitle>MRR por Squad</SectionTitle>
+          <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+            {Object.entries(metrics.mrrBySquad)
+              .sort(([, a], [, b]) => (b as number) - (a as number))
+              .map(([sq, mrr]) => (
+                <KpiCard key={sq} label={sq} value={fmt(mrr as number)} />
+              ))}
+          </div>
+        </div>
+      )}
 
       {/* BRAND CARDS */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
@@ -695,12 +1073,81 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
   // ================================================================
   // PAGE: CADASTRO GERAL
   // ================================================================
-  const renderCadastro = () => (
+  const renderCadastro = () => {
+    const brandCounts = {
+      phant: clients.filter(c => c.brands?.phant?.active).length,
+      leadbox: clients.filter(c => c.brands?.leadbox?.active).length,
+      vivemus: clients.filter(c => c.brands?.vivemus?.active).length,
+      none: clients.filter(c => !c.brands?.phant?.active && !c.brands?.leadbox?.active && !c.brands?.vivemus?.active).length,
+    };
+    const statusCounts = {
+      active: clients.filter(c => (c.status || 'active') === 'active').length,
+      churned: clients.filter(c => c.status === 'churned').length,
+      inactive: clients.filter(c => c.status === 'inactive').length,
+    };
+    const brandChips: { key: BrandKey | 'none'; label: string; count: number; active: string; inactive: string }[] = [
+      { key: 'phant', label: 'Phant', count: brandCounts.phant, active: 'bg-purple-600 text-white border-purple-600', inactive: 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100' },
+      { key: 'leadbox', label: 'Leadbox', count: brandCounts.leadbox, active: 'bg-blue-600 text-white border-blue-600', inactive: 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100' },
+      { key: 'vivemus', label: 'Vivemus', count: brandCounts.vivemus, active: 'bg-emerald-600 text-white border-emerald-600', inactive: 'bg-emerald-50 text-emerald-700 border-emerald-200 hover:bg-emerald-100' },
+      { key: 'none', label: 'Sem marca', count: brandCounts.none, active: 'bg-gray-700 text-white border-gray-700', inactive: 'bg-gray-50 text-gray-500 border-gray-200 hover:bg-gray-100' },
+    ];
+    const hasFilters = brandFilter.size > 0 || statusFilter !== 'all' || searchTerm.trim().length > 0;
+    return (
     <div className="space-y-6 animate-in fade-in duration-500">
-      <PageHeader title="Cadastro Geral" subtitle={`${clients.length} clientes cadastrados`}>
+      <PageHeader title="Cadastro Geral" subtitle={`${filtered.length} de ${clients.length} clientes`}>
         <SearchBar value={searchTerm} onChange={setSearchTerm} />
+        <BtnSecondary onClick={() => { resetImport(); setShowImportModal(true); }}>Importar CSV/XLSX</BtnSecondary>
         <BtnPrimary onClick={newClient}>+ Novo</BtnPrimary>
       </PageHeader>
+
+      {/* FILTROS */}
+      <div className="p-4 bg-white rounded-[20px] border border-gray-100 space-y-4">
+        <div className="flex items-start gap-6 flex-wrap">
+          <div className="space-y-2">
+            <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest block">Filtrar por Empresa</span>
+            <div className="flex flex-wrap gap-2">
+              {brandChips.map(b => {
+                const isOn = brandFilter.has(b.key);
+                const logo = b.key !== 'none' ? brandLogos[b.key] : undefined;
+                return (
+                  <button key={b.key} onClick={() => toggleBrandFilter(b.key)}
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border-2 transition-all ${isOn ? b.active : b.inactive}`}>
+                    {logo && <img src={logo} alt={b.label} className={`w-4 h-4 object-contain rounded-full ${isOn ? 'brightness-0 invert' : ''}`} />}
+                    {b.label}
+                    <span className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[9px] ${isOn ? 'bg-white/20' : 'bg-white/80'}`}>{b.count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <div className="space-y-2">
+            <span className="text-[8px] font-black text-gray-400 uppercase tracking-widest block">Status</span>
+            <div className="flex flex-wrap gap-2">
+              {([
+                { key: 'all' as const, label: 'Todos', count: clients.length },
+                { key: 'active' as const, label: 'Ativos', count: statusCounts.active },
+                { key: 'churned' as const, label: 'Churned', count: statusCounts.churned },
+                { key: 'inactive' as const, label: 'Inativos', count: statusCounts.inactive },
+              ]).map(s => {
+                const isOn = statusFilter === s.key;
+                return (
+                  <button key={s.key} onClick={() => setStatusFilter(s.key)}
+                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest border-2 transition-all ${isOn ? 'bg-black text-white border-black' : 'bg-white text-gray-500 border-gray-200 hover:border-gray-400'}`}>
+                    {s.label}
+                    <span className={`inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[9px] ${isOn ? 'bg-white/20' : 'bg-gray-100'}`}>{s.count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          {hasFilters && (
+            <button onClick={() => { setBrandFilter(new Set()); setStatusFilter('all'); setSearchTerm(''); }}
+              className="ml-auto self-end px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest text-gray-400 hover:text-red-500 transition-colors">
+              Limpar filtros
+            </button>
+          )}
+        </div>
+      </div>
 
       <div className="overflow-x-auto rounded-[20px] border border-gray-100 bg-white shadow-sm">
         <table className="w-full text-left min-w-[1400px]">
@@ -761,7 +1208,8 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
         {filtered.length === 0 && <div className="py-20 text-center"><span className="text-[10px] font-black text-gray-300 uppercase tracking-widest">Nenhum cliente encontrado</span></div>}
       </div>
     </div>
-  );
+    );
+  };
 
   // ================================================================
   // PAGE: GER. RISCO
@@ -867,13 +1315,18 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
         <BtnPrimary onClick={() => { setPlanningForm(EMPTY_PLANNING); setEditingPlanning(null); setShowPlanningForm(true); }}>+ Novo Pipeline</BtnPrimary>
       </PageHeader>
 
-      {/* MINI KPIS */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-        <KpiCard label="Total MRR Pipeline" value={fmt(planning.reduce((s, p) => s + (p.mrr_value || 0), 0))} />
-        <KpiCard label="Total One Time" value={fmt(planning.reduce((s, p) => s + (p.one_time_value || 0), 0))} />
-        <KpiCard label="Fechados" value={planning.filter(p => p.status === 'fechado').length} accent="text-emerald-600" />
-        <KpiCard label="Aguardando" value={planning.filter(p => p.status === 'aguardando').length} />
-      </div>
+      {/* MINI KPIS — exclui recusados dos totais projetados */}
+      {(() => {
+        const ativos = planning.filter(p => p.status !== 'recusado');
+        return (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+            <KpiCard label="Total MRR Pipeline" value={fmt(ativos.reduce((s, p) => s + (p.mrr_value || 0), 0))} sub={`${ativos.length} ativos`} />
+            <KpiCard label="Total One Time" value={fmt(ativos.reduce((s, p) => s + (p.one_time_value || 0), 0))} />
+            <KpiCard label="Fechados" value={planning.filter(p => p.status === 'fechado').length} accent="text-emerald-600" />
+            <KpiCard label="Aguardando" value={planning.filter(p => p.status === 'aguardando').length} />
+          </div>
+        );
+      })()}
 
       <div className="overflow-x-auto rounded-[20px] border border-gray-100 bg-white shadow-sm">
         <table className="w-full text-left min-w-[1200px]">
@@ -1124,8 +1577,8 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
             {c.churn_status?.renewal_date && (
               <div className="pt-3 border-t border-gray-50 flex items-center justify-between">
                 <div><span className="text-[8px] font-black text-gray-300 uppercase block">Renovação</span><span className="text-sm font-black">{fmtDate(c.churn_status.renewal_date)}</span></div>
-                <div className={`px-3 py-1.5 rounded-xl text-center ${rd < 0 ? 'bg-red-100' : rd < 30 ? 'bg-amber-100' : 'bg-emerald-100'}`}>
-                  <span className={`text-xl font-black ${rd < 0 ? 'text-red-600' : rd < 30 ? 'text-amber-600' : 'text-emerald-600'}`}>{rd}</span>
+                <div className={`px-3 py-1.5 rounded-xl text-center ${rd <= 7 ? 'bg-red-100' : rd <= 30 ? 'bg-amber-100' : 'bg-emerald-100'}`}>
+                  <span className={`text-xl font-black ${rd <= 7 ? 'text-red-600' : rd <= 30 ? 'text-amber-600' : 'text-emerald-600'}`}>{rd}</span>
                   <span className="text-[7px] font-black text-gray-400 uppercase block">dias</span>
                 </div>
               </div>
@@ -1218,6 +1671,7 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
       {view === 'detail' && renderDetail()}
       {(showNewForm || isEditing) && renderForm()}
       {showPlanningForm && renderPlanForm()}
+      {showImportModal && renderImportModal()}
     </div>
   );
 };

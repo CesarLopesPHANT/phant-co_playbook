@@ -463,7 +463,7 @@ export const SupabaseService = {
           valor_total: cl.mrr || cl.fee || 0,
           valor_aprovado: cl.mrr || cl.fee || 0,
           ultima_proposta: undefined,
-          _source: 'clients' as any,
+          _source: 'clients',
         });
       });
 
