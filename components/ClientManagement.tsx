@@ -541,61 +541,51 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
   }, [allGroups]);
 
   const runReconcile = async () => {
-    const ops: { keep: ClientRecord; remove: ClientRecord[]; merge: boolean }[] = [];
+    // Apenas complementa o cadastro principal com dados dos outros. Nenhum cadastro é excluído.
+    const ops: { keep: ClientRecord; sources: ClientRecord[] }[] = [];
     allGroups.forEach(g => {
       const choice = reconcileChoices[g.key];
       if (!choice) return;
       const keep = g.clients.find(c => c.id === choice.keepId);
       if (!keep) return;
-      const remove = g.clients.filter(c => c.id !== choice.keepId);
-      if (remove.length === 0) return;
-      ops.push({ keep, remove, merge: choice.mergeFields });
+      const sources = g.clients.filter(c => c.id !== choice.keepId);
+      if (sources.length === 0) return;
+      ops.push({ keep, sources });
     });
-    const total = ops.reduce((s, o) => s + o.remove.length, 0);
-    setReconcileProgress({ done: 0, total, errors: [] });
+    setReconcileProgress({ done: 0, total: ops.length, errors: [] });
     const errors: string[] = [];
-    let done = 0;
-    for (const op of ops) {
-      // 1. Merge de campos em branco do keep a partir dos duplicates
-      if (op.merge) {
-        const merged: any = { ...op.keep };
-        const isEmpty = (v: any) => v === undefined || v === null || v === '' || v === 0;
-        op.remove.forEach(dup => {
-          Object.entries(dup).forEach(([k, v]) => {
-            if (k === 'id' || k === 'created_at' || k === 'updated_at' || k === 'company_name') return;
-            if (k === 'contact') {
-              merged.contact = { ...(dup.contact || {}), ...(merged.contact || {}) };
-              // prefere não-vazio
-              ['name', 'email', 'phone'].forEach(f => {
-                if (isEmpty(merged.contact[f]) && !isEmpty((dup.contact as any)?.[f])) merged.contact[f] = (dup.contact as any)[f];
-              });
-              return;
-            }
-            if (k === 'brands') {
-              merged.brands = merged.brands || {};
-              (['phant','leadbox','vivemus'] as const).forEach(bk => {
-                const mb = merged.brands[bk] || {};
-                const db = (dup.brands as any)?.[bk] || {};
-                merged.brands[bk] = { ...db, ...mb, active: mb.active || db.active };
-              });
-              return;
-            }
-            if (isEmpty(merged[k]) && !isEmpty(v)) merged[k] = v;
-          });
+    const isEmpty = (v: any) => v === undefined || v === null || v === '' || v === 0;
+    for (let i = 0; i < ops.length; i++) {
+      const op = ops[i];
+      const merged: any = { ...op.keep };
+      op.sources.forEach(src => {
+        Object.entries(src).forEach(([k, v]) => {
+          if (k === 'id' || k === 'created_at' || k === 'updated_at' || k === 'company_name') return;
+          if (k === 'contact') {
+            merged.contact = { ...(merged.contact || {}) };
+            (['name', 'email', 'phone'] as const).forEach(f => {
+              if (isEmpty(merged.contact[f]) && !isEmpty((src.contact as any)?.[f])) merged.contact[f] = (src.contact as any)[f];
+            });
+            return;
+          }
+          if (k === 'brands') {
+            merged.brands = merged.brands || {};
+            (['phant','leadbox','vivemus'] as const).forEach(bk => {
+              const mb = merged.brands[bk] || {};
+              const sb = (src.brands as any)?.[bk] || {};
+              merged.brands[bk] = { ...sb, ...mb, active: mb.active || sb.active };
+            });
+            return;
+          }
+          if (isEmpty(merged[k]) && !isEmpty(v)) merged[k] = v;
         });
-        const upd = await SupabaseService.updateClient(op.keep.id, merged);
-        if (!upd.success) errors.push(`merge ${op.keep.company_name}: ${upd.message || 'erro'}`);
-      }
-      // 2. Deleta duplicatas
-      for (const dup of op.remove) {
-        const r = await SupabaseService.deleteClient(dup.id);
-        if (!r.success) errors.push(`${dup.company_name}: ${r.message || 'erro'}`);
-        done++;
-        setReconcileProgress({ done, total, errors });
-      }
+      });
+      const upd = await SupabaseService.updateClient(op.keep.id, merged);
+      if (!upd.success) errors.push(`${op.keep.company_name}: ${upd.message || 'erro'}`);
+      setReconcileProgress({ done: i + 1, total: ops.length, errors });
     }
     await loadData();
-    setManualGroups([]); // limpa grupos manuais após operação
+    setManualGroups([]);
   };
 
   const addManualGroup = () => {
@@ -1065,9 +1055,9 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
   // RECONCILE MODAL
   // ================================================================
   const renderReconcileModal = () => {
-    const totalToRemove = allGroups.reduce((s, g) => {
+    const totalToUpdate = allGroups.reduce((s, g) => {
       const c = reconcileChoices[g.key];
-      return s + (c ? g.clients.length - 1 : 0);
+      return s + (c && g.clients.length > 1 ? 1 : 0);
     }, 0);
     const isRunning = reconcileProgress !== null && reconcileProgress.done < reconcileProgress.total;
     const isDone = reconcileProgress !== null && reconcileProgress.done === reconcileProgress.total && reconcileProgress.total > 0;
@@ -1093,7 +1083,7 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
             <div>
               <h2 className="text-2xl font-black tracking-tighter text-gray-900">Reconciliar Duplicatas</h2>
               <p className="text-gray-400 text-sm font-medium mt-1">
-                {duplicateGroups.length} grupo(s) detectado(s){manualGroups.length > 0 ? ` + ${manualGroups.length} manual(is)` : ''}. Escolha o cadastro <b>principal</b> em cada grupo — os demais serão <b>removidos</b>.
+                {duplicateGroups.length} grupo(s) detectado(s){manualGroups.length > 0 ? ` + ${manualGroups.length} manual(is)` : ''}. Escolha o cadastro <b>principal</b> em cada grupo — os campos vazios serão <b>preenchidos automaticamente</b> com dados dos outros. Nenhum cadastro é excluído.
               </p>
             </div>
             <button onClick={() => { setPickerSelected(new Set()); setPickerSearch(''); setShowPicker(true); }}
@@ -1169,12 +1159,6 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
                             className="ml-2 text-[9px] font-black text-red-400 hover:text-red-600 uppercase tracking-widest">Remover grupo</button>
                         )}
                       </div>
-                      <label className="inline-flex items-center gap-2 text-[10px] font-black uppercase tracking-widest text-gray-600 cursor-pointer">
-                        <input type="checkbox" checked={choice.mergeFields}
-                          onChange={e => setReconcileChoices(prev => ({ ...prev, [g.key]: { ...choice, mergeFields: e.target.checked } }))}
-                          className="w-4 h-4 accent-black" />
-                        Mesclar campos vazios do principal
-                      </label>
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                       {g.clients.map(c => {
@@ -1189,7 +1173,7 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
                               <div className="flex-1 min-w-0">
                                 <div className="flex items-center gap-2 mb-1">
                                   <span className="font-black text-sm text-gray-900 truncate">{c.company_name}</span>
-                                  {isPrimary && <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-emerald-500 text-white">Manter</span>}
+                                  {isPrimary && <span className="inline-flex px-1.5 py-0.5 rounded text-[8px] font-black uppercase bg-emerald-500 text-white">Principal</span>}
                                 </div>
                                 <div className="text-[10px] font-bold text-gray-400 space-y-0.5">
                                   {c.cnpj && <div>CNPJ: <span className="font-mono text-gray-600">{c.cnpj}</span></div>}
@@ -1214,7 +1198,7 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
           {reconcileProgress && (
             <div className="mt-5 p-4 bg-blue-50 rounded-xl border border-blue-100">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-[10px] font-black text-blue-700 uppercase tracking-widest">{isDone ? 'Concluído' : 'Reconciliando...'}</span>
+                <span className="text-[10px] font-black text-blue-700 uppercase tracking-widest">{isDone ? 'Concluído' : 'Complementando cadastros...'}</span>
                 <span className="text-[11px] font-black text-blue-900">{reconcileProgress.done} / {reconcileProgress.total}</span>
               </div>
               <div className="h-2 bg-blue-200 rounded-full overflow-hidden">
@@ -1240,10 +1224,10 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
                   Fechar
                 </button>
               ) : (
-                <button onClick={() => { if (confirm(`Confirma remover ${totalToRemove} cadastro(s) duplicado(s)? Essa ação não pode ser desfeita.`)) runReconcile(); }}
-                  disabled={totalToRemove === 0 || isRunning}
-                  className="flex-1 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] bg-red-600 text-white hover:bg-red-700 transition-all disabled:opacity-40">
-                  {isRunning ? 'Processando...' : `Remover ${totalToRemove} duplicata(s)`}
+                <button onClick={runReconcile}
+                  disabled={totalToUpdate === 0 || isRunning}
+                  className="flex-1 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] bg-emerald-600 text-white hover:bg-emerald-700 transition-all disabled:opacity-40">
+                  {isRunning ? 'Processando...' : `Complementar ${totalToUpdate} cadastro(s)`}
                 </button>
               )}
             </div>
