@@ -160,7 +160,7 @@ const CadastroGeral: React.FC = () => {
   // =================== TAB-SCOPED DATA ===================
 
   const currentTab = TABS.find(t => t.key === activeTab) || TABS[0];
-  const tabRecords = useMemo(() => records.filter(currentTab.filter), [records, currentTab]);
+  const tabRecords = useMemo(() => records.filter(r => r.status !== 'CHURN').filter(currentTab.filter), [records, currentTab]);
 
   // =================== KPI CALCULATIONS (scoped to tab) ===================
 
