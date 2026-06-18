@@ -3,6 +3,7 @@ import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import * as XLSX from 'xlsx';
 import { ClientRecord, ClientHealthBadge, ClientHealthStatus, ConsciousnessLevel, UserRole, PlanningItem, PlanningStatus, RiskRating, AppCustomization } from '../types';
 import { SupabaseService } from '../services/api';
+import CadastroGeral from './CadastroGeral';
 
 type BrandKey = 'phant' | 'leadbox' | 'vivemus';
 type ImportRow = Omit<ClientRecord, 'id' | 'created_at' | 'updated_at'> & { __error?: string; __duplicate?: string };
@@ -273,7 +274,7 @@ const SectionTitle: React.FC<{ children: React.ReactNode }> = ({ children }) => 
 const th = "px-4 py-3 text-[8px] font-black text-gray-400 uppercase tracking-wider whitespace-nowrap";
 const td = "px-4 py-3.5 text-[11px] font-medium text-gray-600";
 const tdBold = "px-4 py-3.5 text-[11px] font-black text-gray-900";
-const trHover = "border-b border-gray-50 hover:bg-gray-50/60 cursor-pointer transition-colors";
+const trHover = "group border-b border-gray-50 hover:bg-gray-50/60 cursor-pointer transition-colors";
 
 // ====== MAIN COMPONENT ======
 const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initialView = 'dashboard', appConfig }) => {
@@ -318,6 +319,7 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
   const [showPicker, setShowPicker] = useState(false);
   const [pickerSelected, setPickerSelected] = useState<Set<string>>(new Set());
   const [pickerSearch, setPickerSearch] = useState('');
+  const [cadastroTab, setCadastroTab] = useState<'empresas' | 'contatos'>('empresas');
 
   const loadData = useCallback(async () => {
     setIsLoading(true);
@@ -936,18 +938,22 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
                 </div>
               );
             })()}
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
+            <div className="grid grid-cols-1 md:grid-cols-5 gap-3">
               <InputField type="number" value={editForm.fee || 0} onChange={v => setEditForm({ ...editForm, fee: Number(v) })} placeholder="Fee" />
               <SelectField value={editForm.contract_model || 'Growth'} onChange={v => setEditForm({ ...editForm, contract_model: v })} options={CONTRACT_MODELS.map(m => ({ value: m, label: m }))} />
               <SelectField value={editForm.squad_name || ''} onChange={v => setEditForm({ ...editForm, squad_name: v })} options={dynamicSquadOptions.map(s => ({ value: s, label: s }))} placeholder="Squad" />
-              <SelectField value={editForm.health_status || 'care'} onChange={v => {
+              <SelectField label="Saúde" value={editForm.health_status || 'care'} onChange={v => {
                 const healthMap: Record<string, ClientHealthBadge> = { safe: 'safe', care: 'care', danger: 'danger', churn: 'danger', implementacao: 'care' };
-                // Sincroniza status do contrato com health_status de churn
                 const nextStatus = v === 'churn' ? 'churned' : (editForm.status === 'churned' ? 'active' : editForm.status || 'active');
                 setEditForm({ ...editForm, health_status: v, health: healthMap[v] || 'care', status: nextStatus });
               }} options={[
                 { value: 'safe', label: 'Safe' }, { value: 'care', label: 'Care' }, { value: 'danger', label: 'Danger' },
                 { value: 'churn', label: 'Churn' }, { value: 'implementacao', label: 'Implementação' }
+              ]} />
+              <SelectField label="Status do Contrato" value={editForm.status || 'active'} onChange={v => setEditForm({ ...editForm, status: v })} options={[
+                { value: 'active', label: 'Ativo' },
+                { value: 'churned', label: 'Churned' },
+                { value: 'inactive', label: 'Inativo' },
               ]} />
             </div>
           </div>
@@ -1544,7 +1550,31 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
     ];
     const hasFilters = brandFilter.size > 0 || statusFilter !== 'all' || searchTerm.trim().length > 0;
     return (
-    <div className="space-y-6 animate-in fade-in duration-500">
+    <div className="space-y-0 animate-in fade-in duration-500">
+      {/* SUB-TABS: Empresas / Contatos & Leads */}
+      <div className="flex gap-1 border-b border-gray-100 mb-6">
+        {([
+          { key: 'empresas' as const, label: 'Empresas', icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" /><path d="M16 7V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v2" /></svg> },
+          { key: 'contatos' as const, label: 'Contatos & Leads', icon: <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87" /><path d="M16 3.13a4 4 0 0 1 0 7.75" /></svg> },
+        ] as const).map(tab => (
+          <button
+            key={tab.key}
+            onClick={() => setCadastroTab(tab.key)}
+            className={`flex items-center gap-2 px-5 py-3.5 border-b-2 text-[11px] font-black uppercase tracking-widest transition-all whitespace-nowrap ${
+              cadastroTab === tab.key
+                ? 'text-black border-black'
+                : 'text-gray-400 border-transparent hover:text-black hover:border-gray-300'
+            }`}
+          >
+            {tab.icon}
+            {tab.label}
+          </button>
+        ))}
+      </div>
+
+      {cadastroTab === 'contatos' && <CadastroGeral />}
+
+      {cadastroTab === 'empresas' && <div className="space-y-6">
       <PageHeader title="Cadastro Geral" subtitle={`${filtered.length} de ${clients.length} clientes`}>
         <SearchBar value={searchTerm} onChange={setSearchTerm} />
         <button onClick={() => { setReconcileProgress(null); setShowReconcileModal(true); }}
@@ -1639,6 +1669,7 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
               <th className={th}>Telefone</th>
               <th className={th}>Entrada</th>
               <th className={th}>Onboarding</th>
+              <th className={th}></th>
             </tr>
           </thead>
           <tbody>
@@ -1665,12 +1696,22 @@ const ClientManagement: React.FC<ClientManagementProps> = ({ currentRole, initia
                 <td className={td}>{c.contact?.phone || '-'}</td>
                 <td className={td}>{fmtDate(c.data_entrada)}</td>
                 <td className={td}>{fmtDate(c.data_onboarding)}</td>
+                <td className="px-3 py-3.5">
+                  <button
+                    onClick={e => { e.stopPropagation(); del(c.id); }}
+                    className="opacity-0 group-hover:opacity-100 transition-opacity px-3 py-1.5 rounded-lg bg-red-50 text-red-400 hover:bg-red-500 hover:text-white text-[9px] font-black uppercase tracking-widest"
+                    title="Remover cliente"
+                  >
+                    Remover
+                  </button>
+                </td>
               </tr>
             ))}
           </tbody>
         </table>
         {filtered.length === 0 && <div className="py-20 text-center"><span className="text-[10px] font-black text-gray-300 uppercase tracking-widest">Nenhum cliente encontrado</span></div>}
       </div>
+    </div>}
     </div>
     );
   };

@@ -59,7 +59,7 @@ const QUICK_LINKS = [
   { id: 'treinamento',    title: 'Treinamento',       desc: 'Trilhas e cursos por área.',                  icon: '🎓', color: 'bg-purple-700' },
   { id: 'fichario',       title: 'Fichário',          desc: 'Documentos, decks e materiais.',              icon: '📂', color: 'bg-blue-600' },
   { id: 'clientes',       title: 'Gestão de Clientes',desc: 'Saúde, risco e expansão da carteira.',        icon: '👥', color: 'bg-emerald-600' },
-  { id: 'cadastro_geral', title: 'Cadastro Geral',    desc: 'CRM e funil de leads.',                       icon: '📇', color: 'bg-rose-600' },
+  { id: 'clientes_cadastro', title: 'Cadastro Geral',    desc: 'CRM e funil de leads.',                       icon: '📇', color: 'bg-rose-600' },
   { id: 'pdf_builder',    title: 'Gerar Propostas',   desc: 'Crie propostas de alto impacto.',             icon: '📄', color: 'bg-amber-600' },
   { id: 'cultura',        title: 'Nossa Essência',    desc: 'Os fundamentos do jeito Phant.',              icon: '🧭', color: 'bg-indigo-600' },
 ];
@@ -226,7 +226,7 @@ const MyDay: React.FC<Props> = ({ userProfile, onNavigate }) => {
         </button>
 
         <button
-          onClick={() => onNavigate?.('cadastro_geral')}
+          onClick={() => onNavigate?.('clientes_cadastro')}
           className="text-left bg-white border border-gray-100 rounded-[28px] p-7 hover:border-gray-200 hover:shadow-md transition-all"
         >
           <div className="text-[8px] font-black text-gray-400 uppercase tracking-[0.3em] mb-3">CRM · Leads</div>

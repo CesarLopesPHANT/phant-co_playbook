@@ -14,7 +14,6 @@ import PrivacyPolicy from './PrivacyPolicy';
 import TermsOfService from './TermsOfService';
 import CopilotModule from './Assist/CopilotModule';
 import ClientManagement from './ClientManagement';
-import CadastroGeral from './CadastroGeral';
 import MembersArea from './MembersArea';
 import MyDay from './MyDay';
 
@@ -133,8 +132,7 @@ const PlaybookEditor: React.FC<PlaybookEditorProps> = ({ module, currentRole, on
   if (module.type === 'dashboard') return <MyDay currentRole={currentRole} userProfile={userProfile} onNavigate={onNavigateToModule} />;
   if (module.type === 'fichario') return <Fichario currentRole={currentRole} />;
   if (module.type === 'calculator') return <ProposalSimulator onNavigateToBuilder={() => onNavigateToModule?.('pdf_builder')} />;
-  if (module.type === 'cadastro_geral') return <CadastroGeral />;
-  if (module.type === 'learning_path') return <MembersArea currentRole={currentRole} userProfile={userProfile} />;
+if (module.type === 'learning_path') return <MembersArea currentRole={currentRole} userProfile={userProfile} />;
   
   // PÁGINAS ESTÁTICAS
   if (module.id === 'cultura') return <NossaEssencia currentRole={currentRole} />;
